@@ -14,3 +14,8 @@ dist/
 Thumbs.db
 desktop.ini
 *.log
+
+# 排查问题时生成的临时文件（不应该提交，更不应该上传到公网）
+推送日志.txt
+检查结果.txt
+登录检查.txt

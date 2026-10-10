@@ -1,0 +1,80 @@
+# GitHub Pages 自动发布工作流
+#
+# 作用：每次向 main 分支推送代码时，GitHub 会在云端自动：
+#   1. 安装依赖（pnpm）
+#   2. 运行自检（pnpm test，检查数据与战斗规则）
+#   3. 构建网页（pnpm build → 生成 dist/）
+#   4. 把 dist/ 发布到 https://qinz5595-dev.github.io/Newgame/
+#
+# 【首次使用前必须在仓库里做一次设置】
+#   打开仓库 → Settings → Pages → Build and deployment
+#   → Source 选择 "GitHub Actions"（不要选 Deploy from a branch）
+#
+# 说明：node_modules、临时日志、本机专用文件都不会上传，
+#       这里上传的只有 GitHub 自己构建出来的 dist 产物。
+
+name: 部署到 GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # 也可以在仓库的 Actions 页面手动点按钮运行
+
+# 发布 Pages 需要的权限
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同一时间只跑一个发布任务；连续推送时，旧任务会被取消
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: 构建网页
+    runs-on: ubuntu-latest
+    steps:
+      - name: 取出仓库代码
+        uses: actions/checkout@v4
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 运行自检（主角数据、卡牌数据、战斗规则、界面生成）
+        run: pnpm test
+
+      - name: 构建网页
+        run: pnpm build
+
+      - name: 配置 Pages
+        uses: actions/configure-pages@v5
+
+      - name: 上传构建产物（dist）
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    name: 发布到公网
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: 部署
+        id: deployment
+        uses: actions/deploy-pages@v4
