@@ -1,0 +1,1063 @@
+/* ==========================================================================
+   卡牌对战 · 全局样式
+   结构：1) 变量与基础  2) 顶栏/底栏  3) 通用面板与按钮  4) 主角选择
+        5) 对战棋盘（主角卡 / 血条 / 属性 / 装备栏）  6) 战场与战斗信息
+        7) 手牌  8) 手机适配
+   ========================================================================== */
+
+/* ---------- 1. 变量与基础 ---------- */
+:root {
+  --bg-deep: #0b0f18;
+  --bg: #121826;
+  --panel: #1b2334;
+  --panel-soft: #212b3f;
+  --line: #33405a;
+  --text: #e9eefb;
+  --text-dim: #97a3ba;
+  --gold: #f0c15a;
+  --gold-deep: #b8862a;
+  --red: #e0554d;
+  --green: #4fbf7b;
+  --blue: #58a6ff;
+  --purple: #9b7bff;
+  --radius: 14px;
+  --radius-lg: 20px;
+  --shadow: 0 12px 30px rgb(0 0 0 / 45%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+body {
+  color: var(--text);
+  font-family: 'Microsoft YaHei', 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif;
+  background-color: var(--bg-deep);
+  background-image:
+    radial-gradient(circle at 15% -10%, rgb(155 123 255 / 22%), transparent 45%),
+    radial-gradient(circle at 85% 0%, rgb(240 193 90 / 12%), transparent 40%),
+    radial-gradient(circle at 50% 120%, rgb(88 166 255 / 14%), transparent 50%);
+  background-attachment: fixed;
+  -webkit-text-size-adjust: 100%;
+  overflow-x: hidden;
+  /* 手机上：去掉点按时的灰色高亮块，并禁止下拉刷新（否则一拉就重新加载，战斗中会丢进度） */
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 100vh;
+  min-height: 100dvh;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+}
+
+/* ---------- 2. 顶栏 / 底栏 ---------- */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  background: linear-gradient(180deg, var(--panel-soft), var(--panel));
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.topbar__title {
+  margin: 0;
+  font-size: clamp(17px, 4.6vw, 22px);
+  letter-spacing: 3px;
+  background: linear-gradient(180deg, #ffe9ad, var(--gold) 60%, var(--gold-deep));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 0 22px rgb(240 193 90 / 25%);
+}
+
+.topbar__version {
+  padding: 3px 9px;
+  font-size: 12px;
+  color: var(--text-dim);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+
+.footer {
+  padding: 4px 0 2px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+/* ---------- 3. 通用面板与按钮 ---------- */
+.screen-host {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.screen--center {
+  align-items: center;
+  justify-content: center;
+}
+
+.panel {
+  width: 100%;
+  padding: clamp(16px, 4vw, 26px);
+  background: linear-gradient(180deg, rgb(33 43 63 / 95%), rgb(23 30 45 / 95%));
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+}
+
+.panel--start {
+  max-width: 520px;
+}
+
+.panel__eyebrow {
+  margin: 0 0 6px;
+  font-size: 12px;
+  letter-spacing: 2px;
+  color: var(--gold);
+}
+
+.panel__title {
+  margin: 0 0 10px;
+  font-size: clamp(19px, 5vw, 25px);
+  color: var(--text);
+}
+
+.panel__text {
+  margin: 0 0 14px;
+  font-size: 14px;
+  line-height: 1.75;
+  color: var(--text-dim);
+}
+
+.panel__note {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.rules {
+  margin: 0 0 18px;
+  padding-left: 20px;
+  font-size: 13.5px;
+  line-height: 2;
+  color: var(--text);
+}
+
+.rules li::marker {
+  color: var(--gold);
+}
+
+.btn {
+  padding: 12px 18px;
+  min-height: 46px;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  cursor: pointer;
+  background: var(--panel-soft);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  /* 触屏优化：避免双击缩放、避免长按选中文字 */
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+  transition: transform 0.12s ease, box-shadow 0.2s ease, filter 0.2s ease;
+}
+
+.btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  filter: grayscale(0.7);
+  opacity: 0.45;
+}
+
+.btn--primary {
+  color: #2b1d05;
+  background: linear-gradient(180deg, #ffe6a6, var(--gold) 55%, var(--gold-deep));
+  border-color: #ffe6a6;
+  box-shadow: 0 6px 18px rgb(240 193 90 / 28%);
+}
+
+.btn--ghost {
+  color: var(--text);
+  background: transparent;
+  border-color: var(--line);
+}
+
+.btn--danger {
+  color: #ffd9d6;
+  background: linear-gradient(180deg, rgb(224 85 77 / 32%), rgb(224 85 77 / 14%));
+  border-color: rgb(224 85 77 / 55%);
+}
+
+.btn--big {
+  display: block;
+  width: 100%;
+  padding: 15px;
+  font-size: 17px;
+}
+
+.btn--block {
+  display: block;
+  width: 100%;
+  margin-top: 14px;
+}
+
+/* ---------- 4. 主角选择 ---------- */
+.hero-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr;
+}
+
+.hero-pick {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  width: 100%;
+  padding: 12px;
+  font-family: inherit;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  background: linear-gradient(140deg, rgb(40 52 76 / 90%), rgb(25 33 49 / 90%));
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  touch-action: manipulation;
+  transition: transform 0.12s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.hero-pick:hover {
+  transform: translateY(-2px);
+  border-color: var(--gold);
+  box-shadow: 0 8px 22px rgb(240 193 90 / 18%);
+}
+
+.hero-pick__icon {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  font-size: 26px;
+  background: radial-gradient(circle at 50% 30%, rgb(240 193 90 / 25%), transparent 70%);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.hero-pick__body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.hero-pick__name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--gold);
+}
+
+.hero-pick__desc {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-dim);
+}
+
+.hero-pick__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.chip {
+  padding: 2px 8px;
+  font-size: 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgb(0 0 0 / 25%);
+}
+
+.chip--hp {
+  color: #ffc0bc;
+  border-color: rgb(224 85 77 / 55%);
+}
+
+.chip--atk {
+  color: #ffe0a3;
+  border-color: rgb(240 193 90 / 55%);
+}
+
+/* ---------- 5. 对战棋盘 ---------- */
+.screen--battle {
+  gap: 10px;
+}
+
+.board {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.board__side {
+  padding: 10px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+}
+
+.board__side--enemy {
+  background: linear-gradient(180deg, rgb(72 26 32 / 55%), rgb(26 20 30 / 60%));
+  border-color: rgb(224 85 77 / 35%);
+}
+
+.board__side--player {
+  background: linear-gradient(180deg, rgb(22 42 66 / 55%), rgb(20 26 40 / 60%));
+  border-color: rgb(88 166 255 / 35%);
+}
+
+.hero-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: linear-gradient(150deg, rgb(36 47 69 / 92%), rgb(22 29 43 / 92%));
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.hero-panel--active {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px rgb(240 193 90 / 35%), 0 0 24px rgb(240 193 90 / 18%);
+}
+
+.hero-panel__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.hero-panel__icon {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  font-size: 24px;
+  background: radial-gradient(circle at 50% 30%, rgb(155 123 255 / 28%), transparent 70%);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.hero-panel__titles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.side__label {
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: var(--text-dim);
+}
+
+.hero-panel__name {
+  font-size: clamp(15px, 4vw, 18px);
+  font-weight: 700;
+  color: var(--gold);
+}
+
+.badge {
+  margin-left: auto;
+  padding: 4px 9px;
+  font-size: 11.5px;
+  border-radius: 999px;
+  border: 1px solid rgb(240 193 90 / 60%);
+  color: #2b1d05;
+  background: linear-gradient(180deg, #ffe6a6, var(--gold));
+  animation: pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(240 193 90 / 45%);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgb(240 193 90 / 0%);
+  }
+}
+
+/* 血条 */
+.hpbar {
+  position: relative;
+  height: 22px;
+  overflow: hidden;
+  background: rgb(0 0 0 / 45%);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+
+.hpbar__fill {
+  height: 100%;
+  background: linear-gradient(180deg, #ff8b7f, var(--red) 60%, #a32b26);
+  transition: width 0.35s ease;
+}
+
+.hpbar__text {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #fff;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 80%);
+}
+
+/* 属性 */
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.stat {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 5px 10px;
+  background: rgb(0 0 0 / 25%);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.stat__label {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.stat__value {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--gold);
+}
+
+.stat__base {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.hero-panel__texts {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.hero-panel__desc {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-dim);
+}
+
+.hero-panel__extra {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+/* 装备栏 */
+.slots {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.slot {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  text-align: center;
+  background: rgb(0 0 0 / 25%);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.slot--empty {
+  opacity: 0.55;
+}
+
+.slot__label {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.slot__value {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* ---------- 6. 战场与战斗信息 ---------- */
+.battlefield {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.turn {
+  padding: 10px 14px;
+  font-size: 14px;
+  text-align: center;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, var(--panel-soft), var(--panel));
+}
+
+.turn strong {
+  font-size: 16px;
+  color: var(--gold);
+}
+
+.turn--player {
+  border-color: rgb(88 166 255 / 60%);
+  box-shadow: 0 0 18px rgb(88 166 255 / 18%) inset;
+}
+
+.turn--enemy {
+  border-color: rgb(224 85 77 / 60%);
+  box-shadow: 0 0 18px rgb(224 85 77 / 18%) inset;
+}
+
+.turn__round {
+  margin-left: 8px;
+  padding: 2px 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+
+.log {
+  padding: 10px 12px;
+  background: rgb(9 12 20 / 70%);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.log__title {
+  margin: 0 0 6px;
+  font-size: 12px;
+  letter-spacing: 2px;
+  color: var(--text-dim);
+}
+
+.log__list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: 148px;
+  margin: 0;
+  padding: 0 2px 0 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  list-style: none;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.log__item {
+  padding: 5px 9px;
+  border-left: 3px solid var(--line);
+  border-radius: 6px;
+  background: rgb(255 255 255 / 3%);
+  color: var(--text);
+}
+
+.log__item--system {
+  border-left-color: var(--gold);
+  color: #ffe7b0;
+}
+
+.log__item--info {
+  border-left-color: var(--blue);
+}
+
+.log__item--warn {
+  border-left-color: var(--purple);
+  color: #ded3ff;
+}
+
+/* ---------- 7. 手牌 ---------- */
+.hand {
+  padding: 10px 12px;
+  background: linear-gradient(180deg, rgb(28 37 54 / 92%), rgb(18 24 36 / 92%));
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+
+.hand__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.hand__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.hand__count {
+  margin-left: 8px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--gold);
+}
+
+.hand__hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.hand__list {
+  display: flex;
+  gap: 8px;
+  padding-bottom: 4px;
+  overflow-x: auto;
+  /* 手机上左右滑动卡牌时，不要让整个页面跟着弹动 */
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+.hand__empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+/* 卡牌 */
+.card {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: clamp(104px, 27vw, 138px);
+  min-height: 172px;
+  padding: 9px;
+  font-family: inherit;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  background: linear-gradient(160deg, #2a3448, #1a2130);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  /* 触屏优化 */
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+  transition: transform 0.14s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.card:hover:not(:disabled) {
+  transform: translateY(-6px);
+  box-shadow: 0 12px 24px rgb(0 0 0 / 45%);
+}
+
+.card:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.card--equipment {
+  background: linear-gradient(160deg, #24344a, #161e2d);
+  border-color: rgb(88 166 255 / 50%);
+}
+
+.card--equipment:hover:not(:disabled) {
+  border-color: var(--blue);
+}
+
+.card--skill {
+  background: linear-gradient(160deg, #33244a, #1b1628);
+  border-color: rgb(155 123 255 / 50%);
+}
+
+.card--skill:hover:not(:disabled) {
+  border-color: var(--purple);
+}
+
+.card__type {
+  align-self: flex-start;
+  padding: 2px 7px;
+  font-size: 11px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 40%);
+  border: 1px solid var(--line);
+}
+
+.card--equipment .card__type {
+  color: #bfe0ff;
+  border-color: rgb(88 166 255 / 60%);
+}
+
+.card--skill .card__type {
+  color: #ded3ff;
+  border-color: rgb(155 123 255 / 60%);
+}
+
+.card__name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--gold);
+}
+
+.card__desc {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.card__values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: auto;
+}
+
+.card__value {
+  padding: 2px 6px;
+  font-size: 11px;
+  border-radius: 6px;
+  color: #ffe7b0;
+  background: rgb(240 193 90 / 12%);
+  border: 1px solid rgb(240 193 90 / 35%);
+}
+
+.card__footer {
+  font-size: 10.5px;
+  color: var(--text-dim);
+}
+
+/* ---------- 8. 操作按钮区 ---------- */
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-bottom: 4px;
+}
+
+.actions .btn {
+  flex: 1 1 140px;
+}
+
+/* ---------- 9. 提示条 · 卡牌状态 · 战斗结束浮层 ---------- */
+.hint {
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text);
+  background: rgb(255 255 255 / 4%);
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+}
+
+.hint--info {
+  color: #cfe6ff;
+  border-color: rgb(88 166 255 / 55%);
+}
+
+.hint--warn {
+  color: #ded3ff;
+  border-color: rgb(155 123 255 / 55%);
+}
+
+.hint--damage {
+  color: #ffd2ce;
+  border-color: rgb(224 85 77 / 60%);
+}
+
+.hint--heal {
+  color: #cdf3dc;
+  border-color: rgb(79 191 123 / 60%);
+}
+
+.hint--equip {
+  color: #cfe6ff;
+  border-color: rgb(88 166 255 / 60%);
+}
+
+.hint--skill {
+  color: #e6ddff;
+  border-color: rgb(155 123 255 / 60%);
+}
+
+.hint--win {
+  color: #ffe9ad;
+  background: rgb(240 193 90 / 12%);
+  border-color: var(--gold);
+}
+
+.hint--lose {
+  color: #ffd2ce;
+  background: rgb(224 85 77 / 12%);
+  border-color: var(--red);
+}
+
+.log__item--damage {
+  border-left-color: var(--red);
+  color: #ffd7d3;
+}
+
+.log__item--heal {
+  border-left-color: var(--green);
+  color: #d1f5e0;
+}
+
+.log__item--equip {
+  border-left-color: var(--blue);
+  color: #d3e9ff;
+}
+
+.log__item--skill {
+  border-left-color: var(--purple);
+  color: #e6ddff;
+}
+
+.log__item--win {
+  border-left-color: var(--gold);
+  color: #ffe9ad;
+}
+
+.log__item--lose {
+  border-left-color: var(--red);
+  color: #ffd2ce;
+}
+
+/* 当前用不上的卡：仍然可以点，点了会说明原因 */
+.card--blocked {
+  opacity: 0.72;
+  border-style: dashed;
+}
+
+.card--blocked:hover:not(:disabled) {
+  transform: none;
+  box-shadow: none;
+}
+
+.card__blocked {
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: #ffc9c4;
+}
+
+/* 生命值偏低时血条闪烁提醒 */
+.hpbar--low {
+  animation: lowhp 1.4s ease-in-out infinite;
+}
+
+.hpbar--low .hpbar__fill {
+  background: linear-gradient(180deg, #ff6b5e, #b3241d);
+}
+
+@keyframes lowhp {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(224 85 77 / 0%);
+  }
+  50% {
+    box-shadow: 0 0 12px 2px rgb(224 85 77 / 45%);
+  }
+}
+
+/* 战斗结束浮层 */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgb(5 8 14 / 78%);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+
+.overlay__card {
+  width: 100%;
+  max-width: 420px;
+  padding: 22px;
+  text-align: center;
+  background: linear-gradient(180deg, #232e44, #161d2b);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+}
+
+.overlay__card--win {
+  border-color: var(--gold);
+  box-shadow: 0 0 40px rgb(240 193 90 / 28%);
+}
+
+.overlay__card--lose {
+  border-color: rgb(224 85 77 / 65%);
+  box-shadow: 0 0 40px rgb(224 85 77 / 25%);
+}
+
+.overlay__eyebrow {
+  margin: 0 0 6px;
+  font-size: 12px;
+  letter-spacing: 2px;
+  color: var(--text-dim);
+}
+
+.overlay__title {
+  margin: 0 0 10px;
+  font-size: clamp(26px, 8vw, 34px);
+  letter-spacing: 4px;
+  background: linear-gradient(180deg, #ffe9ad, var(--gold) 60%, var(--gold-deep));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.overlay__text {
+  margin: 0 0 18px;
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--text-dim);
+}
+
+.overlay__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.overlay__actions .btn {
+  flex: 1 1 140px;
+}
+
+/* ---------- 10. 大屏（电脑）适配 ---------- */
+@media (min-width: 720px) {
+  .hero-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .board__side {
+    padding: 12px;
+  }
+
+  .hero-panel {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    grid-template-areas:
+      'head hp'
+      'stats slots'
+      'desc slots';
+    gap: 10px 16px;
+    align-items: start;
+  }
+
+  .hero-panel__head {
+    grid-area: head;
+  }
+
+  .hpbar {
+    grid-area: hp;
+    align-self: center;
+  }
+
+  .stats {
+    grid-area: stats;
+  }
+
+  .hero-panel__texts {
+    grid-area: desc;
+  }
+
+  .slots {
+    grid-area: slots;
+  }
+}
+
+/* ---------- 11. 手机适配 ---------- */
+@media (max-width: 480px) {
+  #app {
+    gap: 8px;
+    padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+  }
+
+  .panel {
+    padding: 16px 14px;
+  }
+
+  .hero-panel__desc {
+    display: none; /* 小屏上省掉描述文字，保证数值和按钮都看得见 */
+  }
+
+  .log__list {
+    max-height: 120px;
+  }
+
+  .card {
+    min-height: 158px;
+  }
+
+  .actions {
+    position: sticky;
+    bottom: 0;
+    padding: 8px 0 calc(8px + env(safe-area-inset-bottom));
+    background: linear-gradient(180deg, rgb(11 15 24 / 0%), rgb(11 15 24 / 92%) 40%);
+  }
+
+  .actions .btn {
+    flex: 1 1 calc(50% - 4px); /* 手机上两个一行，避免按钮占满整屏 */
+  }
+}

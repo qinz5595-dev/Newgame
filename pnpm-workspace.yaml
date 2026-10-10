@@ -1,0 +1,10 @@
+# pnpm 项目设置文件（pnpm 11 起，pnpm 专属设置项在这里读取）
+#
+# 1) nodeLinker: hoisted —— 使用和 npm 一样的「完全平铺」安装方式。
+#    原因：本机沙箱环境下 Node 不会把 junction（目录链接）解析为真实路径，
+#    默认的 isolated 模式会让 vite 找不到 rollup 等依赖。
+# 2) esbuild 的安装脚本在沙箱里无法执行（spawn EPERM），
+#    但它并不需要执行：平台二进制已在 @esbuild/win32-x64 中，可直接使用。
+nodeLinker: hoisted
+allowBuilds:
+  esbuild: false

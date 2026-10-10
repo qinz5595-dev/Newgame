@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#10141c" />
+    <title>卡牌对战</title>
+    <!-- 注意：这里必须用 ./ 开头的相对路径。
+         GitHub Pages 会把项目放在 https://用户名.github.io/仓库名/ 子目录下，
+         如果写成 /src/... （以斜杠开头），浏览器会去网站根目录找，导致白屏。 -->
+    <link rel="stylesheet" href="./src/styles/main.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <h1 class="topbar__title">卡牌对战</h1>
+        <span class="topbar__version" id="app-version">v0.2.0</span>
+      </header>
+
+      <!-- 各个界面（开始 / 选择主角 / 对战）都由 src/main.js 渲染到这里 -->
+      <main id="screen" class="screen-host"></main>
+
+      <footer class="footer">单机版 · 玩家 vs 电脑 · 装备与技能卡对战</footer>
+    </div>
+
+    <noscript>这个游戏需要开启 JavaScript 才能运行。</noscript>
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>

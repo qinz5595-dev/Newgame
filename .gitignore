@@ -1,0 +1,16 @@
+# 依赖与构建产物（不需要提交到 GitHub）
+node_modules/
+dist/
+
+# pnpm 的本地包缓存（放在项目里是为了避开沙箱权限限制）
+.pnpm-store/
+
+# 本机专用的安装配置（里面有本机的绝对路径，别人克隆下来会困惑）
+.npmrc
+
+# 编辑器与系统生成的临时文件
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+*.log

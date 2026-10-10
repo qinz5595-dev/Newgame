@@ -1,0 +1,17 @@
+{
+  "name": "card-battle-game",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "卡牌对战小游戏（单机模式，玩家 vs 电脑）",
+  "scripts": {
+    "dev": "node tools/dev-server.mjs",
+    "test": "node tools/smoke-test.mjs",
+    "dev:vite": "vite",
+    "build": "vite build",
+    "preview": "node tools/dev-server.mjs --dir dist"
+  },
+  "devDependencies": {
+    "vite": "^7.3.7"
+  }
+}
