@@ -2,16 +2,18 @@
  * 回合流程：抽卡、弃牌、基础攻击、回合切换
  *
  * 一个回合的完整顺序（以玩家为例）：
- *   1. beginTurn(玩家)     → 抽 3 张卡，本回合基础攻击次数归零
+ *   1. beginTurn(玩家)     → 从自己的抽牌堆抽 3 张，本回合基础攻击次数归零
  *   2. 玩家自由出牌（effects.js）、可以基础攻击 1 次（本文件的 baseAttack）
- *   3. endPlayerTurn()     → 弃掉没用完的手牌，轮到电脑，电脑抽 3 张
+ *   3. endPlayerTurn()     → 把没用完的手牌转入弃牌堆，轮到电脑，电脑抽 3 张
  *   4. ai.js 让电脑行动
- *   5. finishEnemyTurn()   → 弃掉电脑剩下的手牌，回合数 +1，轮回玩家
+ *   5. finishEnemyTurn()   → 把电脑剩下的手牌转入弃牌堆，回合数 +1，轮回玩家
  *
  * 这里的函数都是"同步、立刻完成"的，方便测试，也不会有卡死或死循环的风险。
  */
 import { CARDS } from '../data/cards.js'
+import { PRESET_ENEMY_DECK, PRESET_PLAYER_DECK } from '../data/decks.js'
 import { CARDS_PER_TURN, MAX_BASE_ATTACKS_PER_TURN, MAX_COST, MIN_DAMAGE } from '../config.js'
+import { discardHandToPile, drawFromPile, getPileCounts, initPiles } from './deck.js'
 import {
   SIDE,
   SIDE_LABEL,
@@ -47,17 +49,21 @@ export function drawCards(count = CARDS_PER_TURN) {
   return drawn
 }
 
-/** 弃掉某一方手里没用完的牌 */
+/** 弃掉某一方手里没用完的牌：转入该方的弃牌堆 */
 export function discardHand(state, side) {
-  const count = state.hands[side].length
-  state.hands[side] = []
+  const count = discardHandToPile(state, side)
   if (count > 0) {
-    addLog(state, `${SIDE_LABEL[side]}弃掉了 ${count} 张没用上的卡牌。`, 'info')
+    const counts = getPileCounts(state, side)
+    addLog(
+      state,
+      `${SIDE_LABEL[side]}弃掉了 ${count} 张没用上的卡牌（进入弃牌堆，弃牌堆现有 ${counts.discard} 张）。`,
+      'info',
+    )
   }
   return count
 }
 
-/** 开始某一方的回合：发放费用 + 抽牌 + 重置本回合的攻击次数 */
+/** 开始某一方的回合：发放费用 + 从自己的抽牌堆抽牌 + 重置本回合的攻击次数 */
 export function beginTurn(state, side) {
   if (state.finished) return
 
@@ -66,17 +72,19 @@ export function beginTurn(state, side) {
   // 费用：在"自己的回合开始"时发放，新费用 = min(当前 + 3, 上限 8)；
   // 剩余费用保留（不清零），战斗结束后不再发放（grantTurnCost 内部有 finished 守卫）
   grantTurnCost(state, side)
-  state.hands[side] = drawCards(CARDS_PER_TURN)
+  // 抽牌：只从该方自己的抽牌堆抽；不够时把弃牌堆洗回来，两堆都空则少抽
+  state.hands[side] = drawFromPile(state, side, CARDS_PER_TURN)
+  const drawnCount = state.hands[side].length
 
   addLog(
     state,
-    `【第 ${state.round} 回合】${SIDE_LABEL[side]}获得 ${CARDS_PER_TURN} 张卡牌、费用补至 ${getCost(state, side)} / ${MAX_COST}。`,
+    `【第 ${state.round} 回合】${SIDE_LABEL[side]}抽了 ${drawnCount} 张卡牌、费用补至 ${getCost(state, side)} / ${MAX_COST}。`,
     'system',
   )
   if (side === SIDE.PLAYER) {
     setHint(
       state,
-      `轮到你了：本回合获得 ${CARDS_PER_TURN} 张卡牌，当前费用 ${getCost(state, side)} / ${MAX_COST}，可以出牌并发动一次基础攻击。`,
+      `轮到你了：本回合抽到 ${drawnCount} 张卡牌，当前费用 ${getCost(state, side)} / ${MAX_COST}，可以出牌并发动一次基础攻击。`,
       'info',
     )
   } else {
@@ -84,9 +92,12 @@ export function beginTurn(state, side) {
   }
 }
 
-/** 开始一整场战斗：创建状态并让玩家先手抽牌 */
+/** 开始一整场战斗：创建状态 → 建好双方牌堆 → 玩家先手抽牌 */
 export function startBattle(playerHeroId, enemyHeroId) {
   const state = createBattleState(playerHeroId, enemyHeroId)
+  // 牌堆初始化放在这里（而不是 state.js 里），避免 state.js 与 deck.js 互相依赖；
+  // 卡组不合法时 initPiles 会抛出带原因的 Error，从而直接阻止开局
+  initPiles(state, { playerDeck: PRESET_PLAYER_DECK, enemyDeck: PRESET_ENEMY_DECK })
   beginTurn(state, SIDE.PLAYER)
   return state
 }

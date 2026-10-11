@@ -9,6 +9,7 @@
  */
 import { MAX_COST } from '../config.js'
 import { CARD_TYPE, SLOT_LABEL, getCardById } from '../data/cards.js'
+import { discardCard } from './deck.js'
 import {
   SIDE,
   addLog,
@@ -105,6 +106,12 @@ export function useCard(state, side, cardInstance) {
 
   // 先把手牌里的这张卡移除（装备卡也一样：装上去就离开手牌）
   state.hands[side] = state.hands[side].filter((item) => item.instanceId !== cardInstance.instanceId)
+
+  // 牌堆：成功使用的卡牌（技能与装备一样）进入本方弃牌堆。
+  // 出牌的唯一入口就是这里，所以每张牌只会入库一次；装备替换不会再次入库。
+  // 位置放在"扣费 + 离开手牌之后、效果结算之前"：即使效果随后被
+  // D4（致命后跳过剩余效果）或 D6（战斗结束后冻结状态）中断，也只入库一次。
+  discardCard(state, side, cardInstance)
 
   if (card.type === CARD_TYPE.EQUIPMENT) {
     return equipCard(state, side, card, cardInstance)

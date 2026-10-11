@@ -19,6 +19,7 @@ import {
 } from '../core/state.js'
 import { canBaseAttack } from '../core/turn.js'
 import { canUseCard } from '../core/effects.js'
+import { getPileCounts } from '../core/deck.js'
 
 /** 把用户数据放进 HTML 前先转义，避免特殊情况把页面弄坏 */
 export function escapeHtml(value) {
@@ -101,7 +102,7 @@ export function renderHeroSelectScreen() {
 /* ------------------------------------------------------------------ */
 
 /** 一张主角卡（双方共用） */
-function renderHeroPanel(hero, { active, label, handCount, cost, costMax, isEnemy }) {
+function renderHeroPanel(hero, { active, label, handCount, cost, costMax, piles, isEnemy }) {
   const attack = getAttack(hero)
   const defense = getDefense(hero)
   const attackParts = getAttackParts(hero)
@@ -139,10 +140,11 @@ function renderHeroPanel(hero, { active, label, handCount, cost, costMax, isEnem
     })
     .join('')
 
-  // 附加信息行：电脑显示"手牌张数 + 当前费用"，方便玩家看到双方的资源状况
+  // 附加信息行：电脑显示"手牌张数 + 当前费用 + 牌堆数量"，方便玩家看到双方的资源状况
   const extraParts = []
   if (typeof handCount === 'number') extraParts.push(`手牌：${handCount} 张（内容隐藏）`)
   if (typeof cost === 'number') extraParts.push(`费用：${cost} / ${costMax}`)
+  if (piles) extraParts.push(`抽牌堆 ${piles.draw} · 弃牌 ${piles.discard}`)
   const hiddenHand = extraParts.length > 0 ? `<p class="hero-panel__extra">${extraParts.join(' · ')}</p>` : ''
 
   const hpPercent = getHpPercent(hero)
@@ -289,6 +291,8 @@ export function renderBattleScreen(state, ui = {}) {
   const attackDisabled = !canAct || !attackCheck.ok
 
   const handCards = state.hands[SIDE.PLAYER]
+  const playerPiles = getPileCounts(state, SIDE.PLAYER)
+  const enemyPiles = getPileCounts(state, SIDE.ENEMY)
   const hand =
     handCards.length > 0
       ? handCards.map((cardInstance) => renderCard(state, cardInstance, { interactive: canAct })).join('')
@@ -326,6 +330,7 @@ export function renderBattleScreen(state, ui = {}) {
             handCount: state.hands[SIDE.ENEMY].length,
             cost: getCost(state, SIDE.ENEMY),
             costMax: MAX_COST,
+            piles: enemyPiles,
             isEnemy: true,
           })}
         </div>
@@ -352,6 +357,7 @@ export function renderBattleScreen(state, ui = {}) {
           <p class="hand__title">
             你的手牌<span class="hand__count">${handCards.length} 张</span>
             <span class="hand__count">费用 ${getCost(state, SIDE.PLAYER)} / ${MAX_COST}</span>
+            <span class="hand__count">抽牌堆 ${playerPiles.draw} · 弃牌 ${playerPiles.discard}</span>
           </p>
           <p class="hand__hint">${escapeHtml(handHint)}</p>
         </div>

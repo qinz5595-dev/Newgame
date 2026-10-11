@@ -334,6 +334,13 @@ export function createBattleState(playerHeroId, enemyHeroId) {
       [SIDE.ENEMY]: 0,
     },
 
+    // 牌堆：抽牌堆 + 弃牌堆。这里只准备空结构；
+    // 真正的建堆与洗牌在 core/deck.js，由 core/turn.js 的 startBattle() 调用
+    piles: {
+      [SIDE.PLAYER]: { draw: [], discard: [] },
+      [SIDE.ENEMY]: { draw: [], discard: [] },
+    },
+
     finished: false,
     winner: null,
 

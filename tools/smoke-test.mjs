@@ -57,6 +57,17 @@ import {
   startBattle,
 } from '../src/core/turn.js'
 import { canUseCard, useCard } from '../src/core/effects.js'
+import {
+  countCardsInZones,
+  createPile,
+  discardCard,
+  discardHandToPile,
+  drawFromPile,
+  getPile,
+  getPileCounts,
+  initPiles,
+  shuffle,
+} from '../src/core/deck.js'
 import { runEnemyTurn } from '../src/ai/ai.js'
 import { renderStartScreen, renderHeroSelectScreen, renderBattleScreen } from '../src/ui/render.js'
 
@@ -1147,6 +1158,572 @@ check(
   '界面显示电脑的费用',
   uiCostHtml.includes(`费用：${getCost(uiCostState, SIDE.ENEMY)} / ${MAX_COST}`),
   `期望包含「费用：${getCost(uiCostState, SIDE.ENEMY)} / ${MAX_COST}」`,
+)
+
+/* ================================================================== */
+section('[17] 牌堆系统：抽牌堆 / 手牌 / 弃牌堆')
+
+// ---------- 阶段 1：牌堆核心模块 ----------
+/** 把 id 列表压成"每种 id 出现几次"的对照表，用于比较牌堆内容是否与卡组一致 */
+const idCounts = (ids) =>
+  ids.reduce((acc, id) => {
+    acc[id] = (acc[id] || 0) + 1
+    return acc
+  }, {})
+/** 把对照表转成与"键的顺序"无关的字符串，便于直接比较 */
+const idCountsKey = (ids) =>
+  Object.entries(idCounts(ids))
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([id, count]) => `${id}:${count}`)
+    .join(',')
+
+const pileState = createBattleState('knight', 'mage')
+initPiles(pileState, { playerDeck: PRESET_PLAYER_DECK, enemyDeck: PRESET_ENEMY_DECK })
+const playerPile = getPile(pileState, SIDE.PLAYER)
+const enemyPile = getPile(pileState, SIDE.ENEMY)
+
+check(
+  '开局双方抽牌堆各 20 张',
+  playerPile.draw.length === DECK_SIZE && enemyPile.draw.length === DECK_SIZE,
+  `玩家 ${playerPile.draw.length} / 电脑 ${enemyPile.draw.length}`,
+)
+check('开局双方弃牌堆都是 0 张', playerPile.discard.length === 0 && enemyPile.discard.length === 0)
+check(
+  '玩家抽牌堆内容与预设玩家卡组完全一致（逐种张数比对）',
+  idCountsKey(playerPile.draw.map((item) => item.cardId)) === idCountsKey(PRESET_PLAYER_DECK),
+)
+check(
+  '电脑抽牌堆内容与预设电脑卡组完全一致（逐种张数比对）',
+  idCountsKey(enemyPile.draw.map((item) => item.cardId)) === idCountsKey(PRESET_ENEMY_DECK),
+)
+const allInstances = [...playerPile.draw, ...enemyPile.draw]
+check(
+  '40 张实例的 instanceId 全部唯一',
+  new Set(allInstances.map((item) => item.instanceId)).size === 2 * DECK_SIZE,
+  `实际 ${new Set(allInstances.map((item) => item.instanceId)).size} 个`,
+)
+check('双方不共用同一个实例对象', playerPile.draw.every((item) => !enemyPile.draw.includes(item)))
+check(
+  '每张实例都带合法的 cardId',
+  allInstances.every((item) => typeof item.cardId === 'string' && getCardById(item.cardId)),
+)
+check(
+  '牌堆数量查询（draw / discard / hand）',
+  (() => {
+    const counts = getPileCounts(pileState, SIDE.PLAYER)
+    return counts.draw === DECK_SIZE && counts.discard === 0 && counts.hand === 0
+  })(),
+)
+check(
+  '区域内卡牌总数 = 20（装备栏不计入）',
+  countCardsInZones(pileState, SIDE.PLAYER) === DECK_SIZE && countCardsInZones(pileState, SIDE.ENEMY) === DECK_SIZE,
+)
+
+// 洗牌函数本身
+const shuffleSource = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+const shuffledOnce = shuffle(shuffleSource)
+check('shuffle 不修改传入的原数组', JSON.stringify(shuffleSource) === JSON.stringify([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]))
+check(
+  'shuffle 保留全部元素（张数不变、内容相同）',
+  shuffledOnce.length === 10 &&
+    JSON.stringify([...shuffledOnce].sort((a, b) => a - b)) === JSON.stringify(shuffleSource),
+)
+const shuffleOrders = new Set()
+for (let i = 0; i < 10; i += 1) {
+  shuffleOrders.add(
+    createPile(PRESET_PLAYER_DECK)
+      .draw.slice(0, 6)
+      .map((item) => item.cardId)
+      .join(','),
+  )
+}
+check('多次建堆顺序不同（洗牌确实生效）', shuffleOrders.size > 1, `不同顺序 ${shuffleOrders.size} 种`)
+
+// 卡组不合法时必须抛错，而不是静默用错误数据开局
+check(
+  '张数不足的卡组建堆时抛出明确错误',
+  (() => {
+    try {
+      createPile(['iron-sword'], { label: '测试卡组' })
+      return false
+    } catch (error) {
+      return error.message.includes('测试卡组') && error.message.includes(String(DECK_SIZE))
+    }
+  })(),
+)
+check(
+  '引用不存在卡牌 id 的卡组建堆时抛出明确错误',
+  (() => {
+    const bad = [...PRESET_PLAYER_DECK.slice(0, DECK_SIZE - 1), 'not-a-real-card']
+    try {
+      createPile(bad, { label: '测试卡组' })
+      return false
+    } catch (error) {
+      return error.message.includes('not-a-real-card')
+    }
+  })(),
+)
+check(
+  '同名超上限的卡组建堆时抛出明确错误',
+  (() => {
+    const bad = [...PRESET_PLAYER_DECK.slice(0, DECK_SIZE - 1), 'iron-sword']
+    try {
+      createPile(bad, { label: '测试卡组' })
+      return false
+    } catch (error) {
+      return error.message.includes('同名')
+    }
+  })(),
+)
+
+// ---------- 阶段 2：抽牌 ----------
+check(
+  'drawFromPile 正常抽 3 张（抽牌堆递减、弃牌堆不变）',
+  (() => {
+    const s = createBattleState('knight', 'mage')
+    initPiles(s, { playerDeck: PRESET_PLAYER_DECK, enemyDeck: PRESET_ENEMY_DECK })
+    const drawn = drawFromPile(s, SIDE.PLAYER, 3)
+    const pile = getPile(s, SIDE.PLAYER)
+    return drawn.length === 3 && pile.draw.length === DECK_SIZE - 3 && pile.discard.length === 0
+  })(),
+)
+check(
+  '抽牌只影响自己一侧（双方牌堆独立）',
+  (() => {
+    const s = createBattleState('knight', 'mage')
+    initPiles(s, { playerDeck: PRESET_PLAYER_DECK, enemyDeck: PRESET_ENEMY_DECK })
+    drawFromPile(s, SIDE.PLAYER, 3)
+    return getPile(s, SIDE.ENEMY).draw.length === DECK_SIZE
+  })(),
+)
+check(
+  '一次抽到的牌互不重复（同一实例不会被抽两次）',
+  (() => {
+    const s = createBattleState('knight', 'mage')
+    initPiles(s, { playerDeck: PRESET_PLAYER_DECK, enemyDeck: PRESET_ENEMY_DECK })
+    const drawn = drawFromPile(s, SIDE.PLAYER, 3)
+    return new Set(drawn.map((item) => item.instanceId)).size === 3
+  })(),
+)
+
+// ---------- 阶段 3：弃牌接口 ----------
+check(
+  'discardCard 把卡放进弃牌堆',
+  (() => {
+    const s = createBattleState('knight', 'mage')
+    initPiles(s, { playerDeck: PRESET_PLAYER_DECK, enemyDeck: PRESET_ENEMY_DECK })
+    const [card] = drawFromPile(s, SIDE.PLAYER, 1)
+    const ok = discardCard(s, SIDE.PLAYER, card)
+    return ok === true && getPile(s, SIDE.PLAYER).discard.length === 1
+  })(),
+)
+check(
+  'discardCard 对同一实例重复调用不会重复入库',
+  (() => {
+    const s = createBattleState('knight', 'mage')
+    initPiles(s, { playerDeck: PRESET_PLAYER_DECK, enemyDeck: PRESET_ENEMY_DECK })
+    const [card] = drawFromPile(s, SIDE.PLAYER, 1)
+    discardCard(s, SIDE.PLAYER, card)
+    const again = discardCard(s, SIDE.PLAYER, card)
+    return again === false && getPile(s, SIDE.PLAYER).discard.length === 1
+  })(),
+)
+check(
+  'discardCard 传入空值时不改变状态',
+  (() => {
+    const s = createBattleState('knight', 'mage')
+    initPiles(s, { playerDeck: PRESET_PLAYER_DECK, enemyDeck: PRESET_ENEMY_DECK })
+    return discardCard(s, SIDE.PLAYER, null) === false && getPile(s, SIDE.PLAYER).discard.length === 0
+  })(),
+)
+check(
+  'discardHandToPile 把整手牌转入弃牌堆并清空手牌',
+  (() => {
+    const s = createBattleState('knight', 'mage')
+    initPiles(s, { playerDeck: PRESET_PLAYER_DECK, enemyDeck: PRESET_ENEMY_DECK })
+    s.hands[SIDE.PLAYER] = drawFromPile(s, SIDE.PLAYER, 3)
+    const moved = discardHandToPile(s, SIDE.PLAYER)
+    const counts = getPileCounts(s, SIDE.PLAYER)
+    return moved === 3 && counts.hand === 0 && counts.discard === 3 && counts.draw === DECK_SIZE - 3
+  })(),
+)
+check(
+  '空手牌转入弃牌堆时返回 0 且不产生变化',
+  (() => {
+    const s = createBattleState('knight', 'mage')
+    initPiles(s, { playerDeck: PRESET_PLAYER_DECK, enemyDeck: PRESET_ENEMY_DECK })
+    return discardHandToPile(s, SIDE.PLAYER) === 0 && getPile(s, SIDE.PLAYER).discard.length === 0
+  })(),
+)
+
+// ---------- 阶段 2：开局与回合流程（真实对局已接入牌堆） ----------
+check(
+  'startBattle 会建好双方牌堆（各 20 张、弃牌堆 0）',
+  (() => {
+    const s = startBattle('knight', 'mage')
+    const p = getPileCounts(s, SIDE.PLAYER)
+    const e = getPileCounts(s, SIDE.ENEMY)
+    return p.draw === DECK_SIZE - 3 && p.hand === 3 && p.discard === 0 && e.draw === DECK_SIZE && e.hand === 0
+  })(),
+)
+check(
+  '开局玩家手牌确实来自自己的抽牌堆',
+  (() => {
+    const s = startBattle('knight', 'mage')
+    const pileIds = new Set(getPile(s, SIDE.PLAYER).draw.map((item) => item.instanceId))
+    return s.hands[SIDE.PLAYER].every((item) => !pileIds.has(item.instanceId))
+  })(),
+)
+check(
+  'endPlayerTurn：玩家剩余手牌进入弃牌堆，电脑从自己牌堆抽 3 张',
+  (() => {
+    const s = startBattle('knight', 'mage')
+    endPlayerTurn(s)
+    const p = getPileCounts(s, SIDE.PLAYER)
+    const e = getPileCounts(s, SIDE.ENEMY)
+    return p.hand === 0 && p.discard === 3 && p.draw === DECK_SIZE - 3 && e.hand === 3 && e.draw === DECK_SIZE - 3
+  })(),
+)
+check(
+  'finishEnemyTurn：电脑剩余手牌进入弃牌堆、回合数 +1、玩家重新抽 3 张',
+  (() => {
+    const s = startBattle('knight', 'mage')
+    endPlayerTurn(s)
+    runEnemyTurn(s)
+    if (s.finished) return true // 电脑提前结束战斗时该分支不适用
+    finishEnemyTurn(s)
+    const e = getPileCounts(s, SIDE.ENEMY)
+    return s.round === 2 && e.hand === 0 && e.discard > 0 && s.hands[SIDE.PLAYER].length === 3
+  })(),
+)
+check(
+  '多回合后双方区域内卡牌总数恒为 20（守恒：抽牌堆 + 手牌 + 弃牌堆）',
+  (() => {
+    const s = startBattle('knight', 'mage')
+    let ok = true
+    for (let i = 0; i < 3; i += 1) {
+      if (s.finished) break
+      endPlayerTurn(s)
+      if (!s.finished) runEnemyTurn(s)
+      if (!s.finished) finishEnemyTurn(s)
+      if (countCardsInZones(s, SIDE.PLAYER) !== DECK_SIZE) ok = false
+      if (countCardsInZones(s, SIDE.ENEMY) !== DECK_SIZE) ok = false
+    }
+    return ok
+  })(),
+)
+check(
+  '正常对局中每回合都能抽满 3 张（20 张循环够用）',
+  (() => {
+    const s = startBattle('knight', 'mage')
+    let ok = s.hands[SIDE.PLAYER].length === 3
+    for (let i = 0; i < 5 && !s.finished; i += 1) {
+      endPlayerTurn(s)
+      if (s.finished) break
+      if (s.hands[SIDE.ENEMY].length !== 3) ok = false
+      runEnemyTurn(s)
+      if (s.finished) break
+      finishEnemyTurn(s)
+      if (s.hands[SIDE.PLAYER].length !== 3) ok = false
+    }
+    return ok
+  })(),
+)
+
+// ---------- 阶段 3：出牌进入弃牌堆 ----------
+check(
+  '成功使用技能卡：手牌 −1、弃牌堆 +1',
+  (() => {
+    const s = startBattle('knight', 'mage')
+    setCost(s, SIDE.PLAYER, 20)
+    s.hands[SIDE.PLAYER] = []
+    const card = giveCard(s, SIDE.PLAYER, 'fireball')
+    const before = getPileCounts(s, SIDE.PLAYER)
+    useCard(s, SIDE.PLAYER, card)
+    const after = getPileCounts(s, SIDE.PLAYER)
+    return after.hand === 0 && after.discard === before.discard + 1
+  })(),
+)
+check(
+  '成功使用装备卡：本体进入弃牌堆，装备加成仍然生效',
+  (() => {
+    const s = startBattle('knight', 'mage')
+    setCost(s, SIDE.PLAYER, 20)
+    s.hands[SIDE.PLAYER] = []
+    const card = giveCard(s, SIDE.PLAYER, 'iron-sword')
+    const attackBefore = getAttack(s.player)
+    useCard(s, SIDE.PLAYER, card)
+    const inDiscard = getPile(s, SIDE.PLAYER).discard.some((item) => item.instanceId === card.instanceId)
+    return inDiscard && getAttack(s.player) === attackBefore + 2 && s.player.equipment.weapon?.cardId === 'iron-sword'
+  })(),
+)
+check(
+  '替换装备：两张卡各入库一次，加成从零重算不叠加',
+  (() => {
+    const s = startBattle('knight', 'mage')
+    setCost(s, SIDE.PLAYER, 20)
+    s.hands[SIDE.PLAYER] = []
+    useCard(s, SIDE.PLAYER, giveCard(s, SIDE.PLAYER, 'iron-sword'))
+    useCard(s, SIDE.PLAYER, giveCard(s, SIDE.PLAYER, 'great-axe'))
+    return getPile(s, SIDE.PLAYER).discard.length === 2 && getAttack(s.player) === s.player.baseAttack + 4
+  })(),
+)
+check(
+  '费用不足：不扣费、不移除手牌、不动牌堆',
+  (() => {
+    const s = startBattle('knight', 'mage')
+    setCost(s, SIDE.PLAYER, 1)
+    s.hands[SIDE.PLAYER] = []
+    const card = giveCard(s, SIDE.PLAYER, 'fireball')
+    const before = getPileCounts(s, SIDE.PLAYER)
+    const result = useCard(s, SIDE.PLAYER, card)
+    const after = getPileCounts(s, SIDE.PLAYER)
+    return (
+      result.ok === false &&
+      getCost(s, SIDE.PLAYER) === 1 &&
+      after.hand === before.hand &&
+      after.discard === before.discard &&
+      after.draw === before.draw
+    )
+  })(),
+)
+check(
+  '满血时纯治疗卡被拒：不扣费、不移除手牌、不动牌堆',
+  (() => {
+    const s = startBattle('knight', 'mage')
+    setCost(s, SIDE.PLAYER, 20)
+    s.hands[SIDE.PLAYER] = []
+    const card = giveCard(s, SIDE.PLAYER, 'heal')
+    const before = getPileCounts(s, SIDE.PLAYER)
+    const result = useCard(s, SIDE.PLAYER, card)
+    const after = getPileCounts(s, SIDE.PLAYER)
+    return result.ok === false && getCost(s, SIDE.PLAYER) === 20 && after.discard === before.discard && after.hand === 1
+  })(),
+)
+check(
+  '战斗结束后出牌失败：不扣费、不移除手牌、不动牌堆',
+  (() => {
+    const s = startBattle('mage', 'priest')
+    setCost(s, SIDE.PLAYER, 20)
+    s.enemy.hp = 1
+    baseAttack(s, SIDE.PLAYER) // 击杀，战斗结束
+    s.hands[SIDE.PLAYER] = []
+    const card = giveCard(s, SIDE.PLAYER, 'fireball')
+    const before = getPileCounts(s, SIDE.PLAYER)
+    const result = useCard(s, SIDE.PLAYER, card)
+    const after = getPileCounts(s, SIDE.PLAYER)
+    return result.ok === false && after.discard === before.discard && after.hand === 1 && getCost(s, SIDE.PLAYER) === 20
+  })(),
+)
+check(
+  '同一张卡实例重复出牌：第二次失败且不会重复入库（D9）',
+  (() => {
+    const s = startBattle('knight', 'mage')
+    setCost(s, SIDE.PLAYER, 20)
+    s.hands[SIDE.PLAYER] = []
+    const card = giveCard(s, SIDE.PLAYER, 'fireball')
+    const first = useCard(s, SIDE.PLAYER, card)
+    const costAfterFirst = getCost(s, SIDE.PLAYER)
+    const second = useCard(s, SIDE.PLAYER, card)
+    const discardCount = getPile(s, SIDE.PLAYER).discard.filter((item) => item.instanceId === card.instanceId).length
+    return first.ok === true && second.ok === false && discardCount === 1 && getCost(s, SIDE.PLAYER) === costAfterFirst
+  })(),
+)
+check(
+  '无效卡牌 id 无法使用，也不会改变牌堆（D9）',
+  (() => {
+    const s = startBattle('knight', 'mage')
+    setCost(s, SIDE.PLAYER, 20)
+    s.hands[SIDE.PLAYER] = []
+    const broken = createCardInstance('not-a-real-card')
+    s.hands[SIDE.PLAYER].push(broken)
+    const check1 = canUseCard(s, SIDE.PLAYER, broken)
+    const before = getPileCounts(s, SIDE.PLAYER)
+    const result = useCard(s, SIDE.PLAYER, broken)
+    const after = getPileCounts(s, SIDE.PLAYER)
+    return (
+      check1.ok === false &&
+      check1.reason.includes('不存在') &&
+      result.ok === false &&
+      after.hand === 1 &&
+      after.discard === before.discard &&
+      getCost(s, SIDE.PLAYER) === 20
+    )
+  })(),
+)
+
+// ---------- 阶段 4：洗回与牌堆边界 ----------
+check(
+  '抽牌堆只剩 1 张：洗回弃牌堆后抽满 3 张，张数正确',
+  (() => {
+    const s = createBattleState('knight', 'mage')
+    initPiles(s, { playerDeck: PRESET_PLAYER_DECK, enemyDeck: PRESET_ENEMY_DECK })
+    const pile = getPile(s, SIDE.PLAYER)
+    const all = [...pile.draw]
+    pile.draw = [all[0]]
+    pile.discard = []
+    for (let i = 1; i < all.length; i += 1) discardCard(s, SIDE.PLAYER, all[i])
+
+    const drawn = drawFromPile(s, SIDE.PLAYER, 3)
+    const counts = getPileCounts(s, SIDE.PLAYER)
+    return drawn.length === 3 && counts.draw === DECK_SIZE - 3 && counts.discard === 0
+  })(),
+)
+check(
+  '洗回时刚刚抽出的牌不会在本次抽牌中重复出现',
+  (() => {
+    const s = createBattleState('knight', 'mage')
+    initPiles(s, { playerDeck: PRESET_PLAYER_DECK, enemyDeck: PRESET_ENEMY_DECK })
+    const pile = getPile(s, SIDE.PLAYER)
+    const all = [...pile.draw]
+    pile.draw = [all[0]]
+    pile.discard = []
+    for (let i = 1; i < all.length; i += 1) discardCard(s, SIDE.PLAYER, all[i])
+
+    const drawn = drawFromPile(s, SIDE.PLAYER, 3)
+    return new Set(drawn.map((item) => item.instanceId)).size === 3
+  })(),
+)
+check(
+  '洗回会写入简洁的战斗日志',
+  (() => {
+    const s = createBattleState('knight', 'mage')
+    initPiles(s, { playerDeck: PRESET_PLAYER_DECK, enemyDeck: PRESET_ENEMY_DECK })
+    const pile = getPile(s, SIDE.PLAYER)
+    const all = [...pile.draw]
+    pile.draw = [all[0]]
+    pile.discard = []
+    for (let i = 1; i < all.length; i += 1) discardCard(s, SIDE.PLAYER, all[i])
+    drawFromPile(s, SIDE.PLAYER, 3)
+    return s.log.some((entry) => entry.text.includes('洗回抽牌堆'))
+  })(),
+)
+check(
+  '抽牌堆只剩 1 张、弃牌堆为空：只抽 1 张，不报错',
+  (() => {
+    const s = createBattleState('knight', 'mage')
+    initPiles(s, { playerDeck: PRESET_PLAYER_DECK, enemyDeck: PRESET_ENEMY_DECK })
+    const pile = getPile(s, SIDE.PLAYER)
+    pile.draw = [pile.draw[0]]
+    pile.discard = []
+    const drawn = drawFromPile(s, SIDE.PLAYER, 3)
+    const counts = getPileCounts(s, SIDE.PLAYER)
+    return drawn.length === 1 && counts.draw === 0 && counts.discard === 0
+  })(),
+)
+check(
+  '两个牌堆都空：抽到 0 张、不崩溃、战斗状态与费用发放不受影响',
+  (() => {
+    const s = startBattle('knight', 'mage')
+    s.hands[SIDE.PLAYER] = []
+    const pile = getPile(s, SIDE.PLAYER)
+    pile.draw = []
+    pile.discard = []
+    beginTurn(s, SIDE.PLAYER)
+    const counts = getPileCounts(s, SIDE.PLAYER)
+    return (
+      counts.hand === 0 &&
+      counts.draw === 0 &&
+      counts.discard === 0 &&
+      s.finished === false &&
+      getCost(s, SIDE.PLAYER) === 6 &&
+      s.log.some((entry) => entry.text.includes('都没有牌了'))
+    )
+  })(),
+)
+check(
+  '装备栏只是引用：出装备后区域内卡牌总数不变（守恒）',
+  (() => {
+    const s = startBattle('knight', 'mage')
+    setCost(s, SIDE.PLAYER, 20)
+    const pile = getPile(s, SIDE.PLAYER)
+    const index = pile.draw.findIndex((item) => getCardById(item.cardId).type === CARD_TYPE.EQUIPMENT)
+    const [equip] = pile.draw.splice(index, 1)
+    s.hands[SIDE.PLAYER].push(equip)
+
+    const before = countCardsInZones(s, SIDE.PLAYER)
+    useCard(s, SIDE.PLAYER, equip)
+    const after = countCardsInZones(s, SIDE.PLAYER)
+    const slot = getCardById(equip.cardId).slot
+    return before === DECK_SIZE && after === DECK_SIZE && Boolean(s.player.equipment[slot])
+  })(),
+)
+
+// ---------- 阶段 5：界面显示牌堆数量 ----------
+check(
+  '界面显示玩家的抽牌堆与弃牌堆数量',
+  (() => {
+    const s = startBattle('knight', 'mage')
+    const counts = getPileCounts(s, SIDE.PLAYER)
+    return renderBattleScreen(s, { busy: false }).includes(`抽牌堆 ${counts.draw} · 弃牌 ${counts.discard}`)
+  })(),
+)
+check(
+  '界面显示电脑的抽牌堆与弃牌堆数量',
+  (() => {
+    const s = startBattle('knight', 'mage')
+    const counts = getPileCounts(s, SIDE.ENEMY)
+    return renderBattleScreen(s, { busy: false }).includes(`抽牌堆 ${counts.draw} · 弃牌 ${counts.discard}`)
+  })(),
+)
+check(
+  '弃牌后界面上的弃牌堆数量同步更新',
+  (() => {
+    const s = startBattle('knight', 'mage')
+    endPlayerTurn(s) // 玩家剩下的 3 张手牌进入弃牌堆
+    const counts = getPileCounts(s, SIDE.PLAYER)
+    return (
+      counts.discard === 3 &&
+      counts.hand === 0 &&
+      renderBattleScreen(s, { busy: false }).includes(`抽牌堆 ${counts.draw} · 弃牌 ${counts.discard}`)
+    )
+  })(),
+)
+
+// ---------- 区域互斥与实例唯一性（多回合后仍然成立） ----------
+check(
+  '区域互斥：同一实例不会同时出现在抽牌堆/手牌/弃牌堆中的两个区域',
+  (() => {
+    const s = startBattle('knight', 'mage')
+    for (let i = 0; i < 3; i += 1) {
+      if (s.finished) break
+      endPlayerTurn(s)
+      if (!s.finished) runEnemyTurn(s)
+      if (!s.finished) finishEnemyTurn(s)
+    }
+    for (const side of [SIDE.PLAYER, SIDE.ENEMY]) {
+      const pile = getPile(s, side)
+      const ids = [
+        ...pile.draw.map((item) => item.instanceId),
+        ...pile.discard.map((item) => item.instanceId),
+        ...s.hands[side].map((item) => item.instanceId),
+      ]
+      if (new Set(ids).size !== ids.length) return false
+      if (ids.length !== DECK_SIZE) return false
+    }
+    return true
+  })(),
+)
+check(
+  '实例唯一性：双方 40 个实例 id 互不重复（多回合后仍然成立）',
+  (() => {
+    const s = startBattle('knight', 'mage')
+    for (let i = 0; i < 3; i += 1) {
+      if (s.finished) break
+      endPlayerTurn(s)
+      if (!s.finished) runEnemyTurn(s)
+      if (!s.finished) finishEnemyTurn(s)
+    }
+    const all = [SIDE.PLAYER, SIDE.ENEMY].flatMap((side) => {
+      const pile = getPile(s, side)
+      return [
+        ...pile.draw.map((item) => item.instanceId),
+        ...pile.discard.map((item) => item.instanceId),
+        ...s.hands[side].map((item) => item.instanceId),
+      ]
+    })
+    return new Set(all).size === all.length && all.length === 2 * DECK_SIZE
+  })(),
 )
 
 /* ================================================================== */
