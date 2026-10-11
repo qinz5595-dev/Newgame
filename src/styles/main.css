@@ -327,10 +327,44 @@ body {
   gap: 10px;
 }
 
+/* 对战棋盘：窄屏单列（战场在上、战斗记录在下）；≥720px 改为「左侧记录 + 右侧战场」 */
 .board {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  align-items: stretch;
+}
+
+/* 战场：双方主角左右对峙，中间是回合条与提示 */
+.arena {
+  order: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+
+.arena__center {
+  order: -1; /* 窄屏时回合条排在最前，读起来更顺 */
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.arena__vs {
+  align-self: center;
+  padding: 2px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  color: var(--text-dim);
+  border: 1px dashed var(--line);
+  border-radius: 999px;
+}
+
+/* 战斗记录：窄屏在战场下方，桌面端在左侧并撑满高度 */
+.battlefield.log-panel {
+  order: 2;
+  min-height: 0;
 }
 
 .board__side {
@@ -370,15 +404,31 @@ body {
   gap: 10px;
 }
 
-.hero-panel__icon {
+/* 立绘位：先放角色图标，预留方形空间，将来直接换成图片 */
+.hero-panel__portrait {
   display: grid;
   place-items: center;
-  width: 46px;
-  height: 46px;
-  font-size: 24px;
-  background: radial-gradient(circle at 50% 30%, rgb(155 123 255 / 28%), transparent 70%);
+  flex: 0 0 auto;
+  width: 64px;
+  height: 64px;
+  overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 50% 28%, rgb(155 123 255 / 30%), transparent 72%),
+    linear-gradient(180deg, rgb(255 255 255 / 6%), rgb(0 0 0 / 30%));
+}
+
+/* 将来放入 <img> 时自动铺满立绘位 */
+.hero-panel__portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.hero-panel__icon {
+  font-size: 30px;
+  line-height: 1;
 }
 
 .hero-panel__titles {
@@ -501,7 +551,22 @@ body {
   color: var(--text-dim);
 }
 
-/* 装备栏 */
+/* 装备栏：紧贴主角卡下方，与数值区分开 */
+.equip {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line);
+}
+
+.equip__title {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: var(--text-dim);
+}
+
 .slots {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -997,10 +1062,45 @@ body {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  /* 对战棋盘：左侧战斗记录 + 右侧战场 */
+  .board {
+    grid-template-columns: minmax(190px, 232px) minmax(0, 1fr);
+  }
+
+  /* 战场：电脑卡 —— 中央回合区 —— 玩家卡，形成左右对峙 */
+  .arena {
+    order: 0;
+    grid-template-columns: minmax(0, 1fr) minmax(140px, 0.5fr) minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .arena__center {
+    order: 0;
+  }
+
+  .battlefield.log-panel {
+    order: 0;
+  }
+
+  /* 左侧战斗记录撑满战场高度，内部自己滚动 */
+  .log-panel .log {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  .log-panel .log__list {
+    flex: 1 1 auto;
+    max-height: none;
+  }
+
   .board__side {
     padding: 12px;
   }
+}
 
+/* 更宽的屏幕：主角卡内部改成两列（立绘+血条 / 数值+装备栏） */
+@media (min-width: 1080px) {
   .hero-panel {
     display: grid;
     grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
@@ -1029,7 +1129,7 @@ body {
     grid-area: desc;
   }
 
-  .slots {
+  .equip {
     grid-area: slots;
   }
 }
@@ -1049,6 +1149,21 @@ body {
     display: none; /* 小屏上省掉描述文字，保证数值和按钮都看得见 */
   }
 
+  /* 立绘位缩小，给手牌和按钮留出空间 */
+  .hero-panel__portrait {
+    width: 52px;
+    height: 52px;
+  }
+
+  .hero-panel__icon {
+    font-size: 24px;
+  }
+
+  /* 窄屏改成纵向排列，中间的 VS 分隔没有意义 */
+  .arena__vs {
+    display: none;
+  }
+
   .log__list {
     max-height: 120px;
   }
@@ -1066,5 +1181,253 @@ body {
 
   .actions .btn {
     flex: 1 1 calc(50% - 4px); /* 手机上两个一行，避免按钮占满整屏 */
+  }
+}
+
+/* ==========================================================================
+   12. P2-A2：二次元对战视觉 + 战斗记录折叠
+   本节刻意放在所有断点之后：只做「叠加覆盖」，不改动上方既有布局规则，
+   并用后置顺序保证折叠相关声明不会被前面的断点规则盖掉（不依赖 :has()）。
+   ========================================================================== */
+
+/* 12.1 战场：克制的中央光池 + 暗角层次 */
+.arena {
+  position: relative;
+  padding: 6px;
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(58% 46% at 50% 24%, rgb(240 193 90 / 7%), transparent 72%),
+    linear-gradient(180deg, rgb(255 255 255 / 3%), rgb(0 0 0 / 16%));
+  box-shadow: inset 0 0 46px rgb(0 0 0 / 42%);
+}
+
+/* 12.2 阵营强调线：电脑红 / 玩家蓝（不裁剪子元素，保留主角卡外发光） */
+.board__side {
+  position: relative;
+}
+
+.board__side::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, var(--faction, var(--line)), transparent);
+}
+
+.board__side--enemy {
+  --faction: var(--red);
+  box-shadow: 0 0 20px rgb(224 85 77 / 14%);
+}
+
+.board__side--player {
+  --faction: var(--blue);
+  box-shadow: 0 0 20px rgb(88 166 255 / 14%);
+}
+
+/* 12.3 主角卡：统一金框层次；行动方沿用金色描边但保留阵营色可辨识 */
+.hero-panel {
+  box-shadow: var(--shadow);
+}
+
+.hero-panel__name {
+  text-shadow: 0 1px 10px rgb(240 193 90 / 35%);
+}
+
+.hero-panel--active {
+  border-color: var(--gold);
+}
+
+/* 12.4 立绘位：相框 + 内侧暗角 + 细金色角标（仍是占位，不伪造立绘） */
+.hero-panel__portrait {
+  position: relative;
+  border-color: rgb(240 193 90 / 38%);
+  box-shadow: inset 0 0 18px rgb(0 0 0 / 55%);
+}
+
+.hero-panel__portrait::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border: 1px solid rgb(240 193 90 / 22%);
+  border-radius: 10px;
+  pointer-events: none;
+}
+
+/* 12.5 血条：渐变 + 内阴影 + 高光（低血量仍沿用 .hpbar--low 的原有触发规则） */
+.hpbar {
+  box-shadow: inset 0 2px 6px rgb(0 0 0 / 55%);
+}
+
+.hpbar__fill {
+  background: linear-gradient(180deg, #ffb0a4, var(--red) 55%, #8f231f);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 28%);
+}
+
+.hpbar--low .hpbar__fill {
+  background: linear-gradient(180deg, #ff8b7f, #c02a24 60%, #6d1512);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 20%), 0 0 12px rgb(224 85 77 / 45%);
+}
+
+/* 12.6 数值芯片：攻击金 / 防御蓝（仍只是原有数值，不是护盾） */
+.stat {
+  background: linear-gradient(180deg, rgb(255 255 255 / 5%), rgb(0 0 0 / 22%));
+}
+
+.stat:first-child {
+  border-color: rgb(240 193 90 / 35%);
+}
+
+.stat:last-child {
+  border-color: rgb(88 166 255 / 35%);
+}
+
+/* 12.7 装备栏：金色标题与明确的槽位区分 */
+.equip__title {
+  color: var(--gold);
+}
+
+.slot {
+  background: linear-gradient(180deg, rgb(255 255 255 / 4%), rgb(0 0 0 / 24%));
+  border-color: rgb(240 193 90 / 22%);
+}
+
+.slot--empty {
+  border-style: dashed;
+  border-color: var(--line);
+}
+
+/* 12.8 中央：VS 金色纹章 + 回合条缎带（提示条结构与位置不变） */
+.arena__vs {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  font-size: 13px;
+  letter-spacing: 1px;
+  color: var(--gold);
+  background:
+    radial-gradient(circle at 50% 35%, rgb(240 193 90 / 22%), transparent 70%),
+    linear-gradient(180deg, var(--panel-soft), var(--panel));
+  border: 1px solid rgb(240 193 90 / 55%);
+  box-shadow: 0 0 18px rgb(240 193 90 / 18%);
+}
+
+.turn {
+  background: linear-gradient(180deg, var(--panel-soft), var(--panel));
+  border-top-color: rgb(240 193 90 / 30%);
+  border-bottom-color: rgb(240 193 90 / 30%);
+}
+
+/* 480px 及以下：延续 P2-A 规则隐藏 VS（第 12 节的 display 声明需要在这里重新让位） */
+@media (max-width: 480px) {
+  .arena__vs {
+    display: none;
+  }
+}
+
+/* 12.9 手牌：费用徽章（仍是数组里第一个「费用 N」文本，位置与内容都不变） */
+.card__value:first-child {
+  padding: 3px 10px;
+  font-weight: 700;
+  color: #2b1d05;
+  background: linear-gradient(180deg, #ffe6a6, var(--gold) 60%, var(--gold-deep));
+  border-radius: 999px;
+}
+
+/* 12.10 战斗记录：头部 + 折叠按钮 */
+.log__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.log__title {
+  margin: 0;
+  color: var(--gold);
+}
+
+.log__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 3px 9px;
+  font-family: inherit;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  cursor: pointer;
+  background: rgb(255 255 255 / 5%);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  touch-action: manipulation;
+}
+
+.log__toggle:hover {
+  color: var(--gold);
+  border-color: rgb(240 193 90 / 45%);
+}
+
+.log__toggle:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+/* 折叠：列表只是被 CSS 隐藏，DOM 里仍然保留（自动滚动与既有断言都依赖它） */
+.log-panel--collapsed .log__list {
+  display: none;
+}
+
+/* 窄屏（<720px）：折叠后只剩一行标题栏，不保留竖条 */
+@media (max-width: 719px) {
+  .log-panel--collapsed {
+    order: 2;
+  }
+
+  .log-panel--collapsed .log {
+    padding: 6px 10px;
+  }
+}
+
+/* 桌面端（≥720px）：折叠为约 44px 的窄侧栏，标题竖排仍可辨认，按钮可再次展开 */
+@media (min-width: 720px) {
+  .board--log-collapsed {
+    grid-template-columns: 44px minmax(0, 1fr);
+  }
+
+  .log-panel--collapsed .log {
+    padding: 8px 4px;
+  }
+
+  .log-panel--collapsed .log__head {
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 0;
+  }
+
+  .log-panel--collapsed .log__title {
+    writing-mode: vertical-rl;
+    letter-spacing: 4px;
+  }
+
+  .log-panel--collapsed .log__toggle {
+    padding: 4px 5px;
+  }
+
+  .log-panel--collapsed .log__toggle-text {
+    display: none; /* 窄条里只留箭头；完整名称由 aria-label 提供 */
+  }
+}
+
+/* 12.11 尊重「减少动态效果」偏好：只关动画，不删除任何状态样式 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
   }
 }

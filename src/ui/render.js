@@ -149,11 +149,15 @@ function renderHeroPanel(hero, { active, label, handCount, cost, costMax, piles,
 
   const hpPercent = getHpPercent(hero)
   const lowHp = hpPercent <= 30 ? 'hpbar--low' : ''
+  // 立绘占位：暂时用角色图标；数据缺失时给一个安全的占位字符，避免出现 undefined
+  const portrait = hero.icon || '★'
 
   return `
     <article class="hero-panel ${active ? 'hero-panel--active' : ''} ${isEnemy ? 'hero-panel--enemy' : ''}">
       <header class="hero-panel__head">
-        <span class="hero-panel__icon" aria-hidden="true">${escapeHtml(hero.icon)}</span>
+        <div class="hero-panel__portrait" aria-hidden="true">
+          <span class="hero-panel__icon">${escapeHtml(portrait)}</span>
+        </div>
         <span class="hero-panel__titles">
           <span class="side__label">${escapeHtml(label)}</span>
           <span class="hero-panel__name">${escapeHtml(hero.name)}</span>
@@ -183,7 +187,11 @@ function renderHeroPanel(hero, { active, label, handCount, cost, costMax, piles,
         <p class="hero-panel__desc">${escapeHtml(hero.description)}</p>
         ${hiddenHand}
       </div>
-      <ul class="slots">${slots}</ul>
+
+      <div class="equip">
+        <p class="equip__title">装备栏</p>
+        <ul class="slots">${slots}</ul>
+      </div>
     </article>
   `
 }
@@ -229,16 +237,37 @@ function renderCard(state, cardInstance, { interactive }) {
   `
 }
 
-/** 战斗信息区 */
-function renderLog(log) {
+/**
+ * 战斗信息区（可折叠）
+ * 注意：折叠时只让 CSS 隐藏列表，<ul class="log__list" id="battle-log"> 必须继续存在于 DOM 中，
+ * 否则 main.js 的 scrollLogToBottom()（querySelector('.log__list')）会找不到它。
+ * 「战斗信息」四个字在展开/折叠两种状态下都必须保留（既有测试断言依赖它）。
+ */
+function renderLog(log, { collapsed = false } = {}) {
   const items = log
     .map((entry) => `<li class="log__item log__item--${escapeHtml(entry.kind)}">${escapeHtml(entry.text)}</li>`)
     .join('')
 
+  const toggleLabel = collapsed ? '展开战斗记录' : '收起战斗记录'
+
   return `
     <div class="log">
-      <p class="log__title">战斗信息</p>
-      <ul class="log__list">${items}</ul>
+      <div class="log__head">
+        <p class="log__title">战斗信息</p>
+        <button
+          class="log__toggle"
+          type="button"
+          data-action="toggle-log"
+          aria-expanded="${collapsed ? 'false' : 'true'}"
+          aria-controls="battle-log"
+          aria-label="${toggleLabel}"
+          title="${toggleLabel}"
+        >
+          <span class="log__toggle-icon" aria-hidden="true">${collapsed ? '›' : '‹'}</span>
+          <span class="log__toggle-text">${toggleLabel}</span>
+        </button>
+      </div>
+      <ul class="log__list" id="battle-log">${items}</ul>
     </div>
   `
 }
@@ -284,6 +313,9 @@ function renderResultOverlay(state) {
  */
 export function renderBattleScreen(state, ui = {}) {
   const busy = Boolean(ui.busy)
+  // 战斗记录是否收起：默认展开（false）。由 main.js 的 app.logCollapsed 传入，
+  // 状态存在 app 里而不是 DOM 里，所以整块重绘不会把它冲掉。
+  const logCollapsed = Boolean(ui.logCollapsed)
   const isPlayerTurn = state.turn === SIDE.PLAYER && !state.finished
   const canAct = isPlayerTurn && !busy
 
@@ -322,33 +354,39 @@ export function renderBattleScreen(state, ui = {}) {
 
   return `
     <section class="screen screen--battle">
-      <div class="board">
-        <div class="board__side board__side--enemy">
-          ${renderHeroPanel(state.enemy, {
-            active: state.turn === SIDE.ENEMY && !state.finished,
-            label: SIDE_LABEL[SIDE.ENEMY],
-            handCount: state.hands[SIDE.ENEMY].length,
-            cost: getCost(state, SIDE.ENEMY),
-            costMax: MAX_COST,
-            piles: enemyPiles,
-            isEnemy: true,
-          })}
-        </div>
+      <div class="board ${logCollapsed ? 'board--log-collapsed' : ''}">
+        <aside class="battlefield log-panel ${logCollapsed ? 'log-panel--collapsed' : ''}">
+          ${renderLog(state.log, { collapsed: logCollapsed })}
+        </aside>
 
-        <div class="battlefield">
-          <div class="turn ${state.turn === SIDE.PLAYER ? 'turn--player' : 'turn--enemy'}">
-            ${escapeHtml(turnText)}
-            <span class="turn__round">第 ${state.round} 回合</span>
+        <div class="arena">
+          <div class="board__side board__side--enemy">
+            ${renderHeroPanel(state.enemy, {
+              active: state.turn === SIDE.ENEMY && !state.finished,
+              label: SIDE_LABEL[SIDE.ENEMY],
+              handCount: state.hands[SIDE.ENEMY].length,
+              cost: getCost(state, SIDE.ENEMY),
+              costMax: MAX_COST,
+              piles: enemyPiles,
+              isEnemy: true,
+            })}
           </div>
-          ${renderHint(state)}
-          ${renderLog(state.log)}
-        </div>
 
-        <div class="board__side board__side--player">
-          ${renderHeroPanel(state.player, {
-            active: isPlayerTurn,
-            label: SIDE_LABEL[SIDE.PLAYER],
-          })}
+          <div class="arena__center">
+            <div class="turn ${state.turn === SIDE.PLAYER ? 'turn--player' : 'turn--enemy'}">
+              ${escapeHtml(turnText)}
+              <span class="turn__round">第 ${state.round} 回合</span>
+            </div>
+            <span class="arena__vs" aria-hidden="true">VS</span>
+            ${renderHint(state)}
+          </div>
+
+          <div class="board__side board__side--player">
+            ${renderHeroPanel(state.player, {
+              active: isPlayerTurn,
+              label: SIDE_LABEL[SIDE.PLAYER],
+            })}
+          </div>
         </div>
       </div>
 

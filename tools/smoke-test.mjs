@@ -367,6 +367,104 @@ check('对战界面含提示条', battleHtml.includes('class="hint'))
 check('对战界面含操作按钮', ['attack', 'end-turn', 'restart', 'go-select'].every((a) => battleHtml.includes(`data-action="${a}"`)))
 check('对战界面含战斗信息区', battleHtml.includes('战斗信息'))
 
+// ---- P2-A 布局重构：左侧战斗记录 + 中央左右对峙（本次新增的结构断言） ----
+check('对战界面含左侧战斗记录面板', battleHtml.includes('log-panel') && battleHtml.includes('log__list'))
+check(
+  '对战界面含战场容器与中央对峙区',
+  battleHtml.includes('class="arena"') && battleHtml.includes('arena__center') && battleHtml.includes('arena__vs'),
+)
+check(
+  '左右对峙顺序为「电脑区 → 中央 → 玩家区」',
+  battleHtml.indexOf('board__side--enemy') < battleHtml.indexOf('arena__center') &&
+    battleHtml.indexOf('arena__center') < battleHtml.indexOf('board__side--player'),
+)
+check('双方主角卡各有一个立绘占位位', (battleHtml.match(/hero-panel__portrait/g) || []).length === 2)
+check('立绘占位不会渲染出 undefined', (battleHtml.match(/hero-panel__icon">undefined/g) || []).length === 0)
+check(
+  '每名主角卡都带装备栏标题与三个槽位',
+  (battleHtml.match(/equip__title/g) || []).length === 2 && (battleHtml.match(/class="slot /g) || []).length === 6,
+)
+check(
+  '装备栏位于主角名之后（附在主角卡下方）',
+  battleHtml.indexOf('hero-panel__name') < battleHtml.indexOf('equip__title'),
+)
+check('手牌区保留三个状态标签（张数 / 费用 / 牌堆）', (battleHtml.match(/hand__count/g) || []).length === 3)
+check(
+  '出牌所需的交互属性仍在（data-action / data-instance-id）',
+  battleHtml.includes('data-action="play-card"') && battleHtml.includes('data-instance-id='),
+)
+check('战斗记录里包含本场对局的实际内容', battleHtml.includes('对战开始'))
+
+// ---- P2-A2：战斗记录折叠（本次新增；只做新增断言，不改动上面任何一条） ----
+const logCollapsedHtml = renderBattleScreen(uiState, { busy: false, logCollapsed: true })
+const logCollapsedBusyHtml = renderBattleScreen(uiState, { busy: true, logCollapsed: true })
+const logExpandedAgainHtml = renderBattleScreen(uiState, { busy: false, logCollapsed: false })
+const p2a2CssText = readFileSync(
+  resolve(dirname(fileURLToPath(import.meta.url)), '../src/styles/main.css'),
+  'utf8',
+)
+
+check(
+  '默认展开：有 log-panel 但没有折叠类名',
+  battleHtml.includes('log-panel') &&
+    !battleHtml.includes('log-panel--collapsed') &&
+    !battleHtml.includes('board--log-collapsed'),
+)
+check(
+  '默认展开：折叠按钮 aria-expanded="true"',
+  battleHtml.includes('data-action="toggle-log"') && battleHtml.includes('aria-expanded="true"'),
+)
+check(
+  '折叠状态：board 与 log-panel 都带折叠类名',
+  logCollapsedHtml.includes('board--log-collapsed') && logCollapsedHtml.includes('log-panel--collapsed'),
+)
+check(
+  '折叠状态：日志列表仍在 DOM 中（log__list + id="battle-log"）',
+  logCollapsedHtml.includes('log__list') && logCollapsedHtml.includes('id="battle-log"'),
+)
+check('折叠状态：仍输出「战斗信息」', logCollapsedHtml.includes('战斗信息'))
+check(
+  '折叠状态：日志条目与类型标记未被移除',
+  logCollapsedHtml.includes('log__item--') && logCollapsedHtml.includes('对战开始'),
+)
+check(
+  '折叠按钮：data-action / aria-controls 正确',
+  battleHtml.includes('data-action="toggle-log"') &&
+    battleHtml.includes('aria-controls="battle-log"') &&
+    logCollapsedHtml.includes('aria-controls="battle-log"'),
+)
+check(
+  '折叠按钮：aria-expanded 随状态翻转',
+  battleHtml.includes('aria-expanded="true"') &&
+    logCollapsedHtml.includes('aria-expanded="false"') &&
+    logExpandedAgainHtml.includes('aria-expanded="true"'),
+)
+check('连续渲染同一折叠状态输出稳定', logCollapsedHtml === renderBattleScreen(uiState, { busy: false, logCollapsed: true }))
+check(
+  'busy: true 时折叠状态仍正确',
+  logCollapsedBusyHtml.includes('log-panel--collapsed') && logCollapsedBusyHtml.includes('aria-expanded="false"'),
+)
+check(
+  '折叠不影响战斗交互属性与主角卡结构',
+  logCollapsedHtml.includes('data-action="play-card"') &&
+    logCollapsedHtml.includes('data-instance-id=') &&
+    ['attack', 'end-turn', 'restart', 'go-select'].every((a) => logCollapsedHtml.includes(`data-action="${a}"`)) &&
+    (logCollapsedHtml.match(/equip__title/g) || []).length === 2 &&
+    (logCollapsedHtml.match(/hero-panel__portrait/g) || []).length === 2,
+)
+check(
+  '样式表：折叠只隐藏日志列表（未移除结构）',
+  /\.log-panel--collapsed\s+\.log__list\s*\{[^}]*display:\s*none/.test(p2a2CssText),
+)
+check(
+  '样式表：桌面折叠为窄侧栏（board--log-collapsed 有列宽定义）',
+  /\.board--log-collapsed\s*\{[^}]*grid-template-columns/.test(p2a2CssText),
+)
+check(
+  '样式表：含减少动态效果媒体查询且不删除状态样式',
+  p2a2CssText.includes('prefers-reduced-motion: reduce') && p2a2CssText.includes('log__toggle:hover'),
+)
+
 // 满血时治疗卡应显示为"当前用不上"
 const blockedState = startBattle('priest', 'mage')
 blockedState.hands[SIDE.PLAYER] = []

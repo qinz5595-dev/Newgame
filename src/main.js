@@ -22,6 +22,9 @@ const app = {
   battle: null, // 战斗开始后才有值
   busy: false, // 电脑正在行动时，禁止玩家操作
   timer: null, // 电脑回合的定时器
+  // 战斗记录是否收起。必须放在这里：render() 会用 innerHTML 整块重建界面，
+  // 任何存在 DOM / CSS 里的状态都会被重建冲掉。刷新页面即恢复默认（展开）。
+  logCollapsed: false,
 }
 
 const screenEl = document.getElementById('screen')
@@ -37,7 +40,7 @@ function render() {
   if (app.screen === SCREEN.HERO_SELECT) {
     screenEl.innerHTML = renderHeroSelectScreen()
   } else if (app.screen === SCREEN.BATTLE && app.battle) {
-    screenEl.innerHTML = renderBattleScreen(app.battle, { busy: app.busy })
+    screenEl.innerHTML = renderBattleScreen(app.battle, { busy: app.busy, logCollapsed: app.logCollapsed })
   } else {
     screenEl.innerHTML = renderStartScreen()
   }
@@ -158,6 +161,12 @@ function playerEndTurn() {
   }, ENEMY_TURN_DELAY_MS)
 }
 
+/** 收起/展开左侧战斗记录：只切换界面偏好，不碰任何战斗状态 */
+function toggleLogPanel() {
+  app.logCollapsed = !app.logCollapsed
+  render()
+}
+
 /* ------------------------------------------------------------------ */
 /* 事件分发                                                            */
 /* ------------------------------------------------------------------ */
@@ -169,6 +178,7 @@ const ACTIONS = {
   'play-card': playCard,
   'attack': playerAttack,
   'end-turn': playerEndTurn,
+  'toggle-log': toggleLogPanel,
 }
 
 document.addEventListener('click', (event) => {
