@@ -2,7 +2,7 @@
  * 全局配置常量
  * 想把游戏调难或调简单，优先改这里，不用翻逻辑代码。
  */
-export const APP_VERSION = '0.2.0'
+export const APP_VERSION = '0.3.0'
 
 /** 每个回合抽几张牌 */
 export const CARDS_PER_TURN = 3

@@ -1,7 +1,7 @@
 {
   "name": "card-battle-game",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "description": "卡牌对战小游戏（单机模式，玩家 vs 电脑）",
   "scripts": {
