@@ -6,12 +6,13 @@
  */
 import { HEROES } from '../data/heroes.js'
 import { CARD_TYPE, CARD_TYPE_LABEL, SLOT_LABEL, getCardById } from '../data/cards.js'
-import { CARDS_PER_TURN } from '../config.js'
+import { CARDS_PER_TURN, MAX_COST } from '../config.js'
 import {
   SIDE,
   SIDE_LABEL,
   getAttack,
   getAttackParts,
+  getCost,
   getDefense,
   getDefenseParts,
   getHpPercent,
@@ -100,7 +101,7 @@ export function renderHeroSelectScreen() {
 /* ------------------------------------------------------------------ */
 
 /** 一张主角卡（双方共用） */
-function renderHeroPanel(hero, { active, label, handCount, isEnemy }) {
+function renderHeroPanel(hero, { active, label, handCount, cost, costMax, isEnemy }) {
   const attack = getAttack(hero)
   const defense = getDefense(hero)
   const attackParts = getAttackParts(hero)
@@ -138,8 +139,11 @@ function renderHeroPanel(hero, { active, label, handCount, isEnemy }) {
     })
     .join('')
 
-  const hiddenHand =
-    typeof handCount === 'number' ? `<p class="hero-panel__extra">手牌：${handCount} 张（内容隐藏）</p>` : ''
+  // 附加信息行：电脑显示"手牌张数 + 当前费用"，方便玩家看到双方的资源状况
+  const extraParts = []
+  if (typeof handCount === 'number') extraParts.push(`手牌：${handCount} 张（内容隐藏）`)
+  if (typeof cost === 'number') extraParts.push(`费用：${cost} / ${costMax}`)
+  const hiddenHand = extraParts.length > 0 ? `<p class="hero-panel__extra">${extraParts.join(' · ')}</p>` : ''
 
   const hpPercent = getHpPercent(hero)
   const lowHp = hpPercent <= 30 ? 'hpbar--low' : ''
@@ -192,6 +196,8 @@ function renderCard(state, cardInstance, { interactive }) {
   const blocked = interactive && !usable.ok
 
   const values = []
+  // 费用放在最前面，让玩家第一眼看到这张卡要花多少钱
+  if (card.cost) values.push(`费用 ${card.cost}`)
   if (card.attack) values.push(`攻击 ${card.attack > 0 ? '+' : ''}${card.attack}`)
   if (card.defense) values.push(`防御 ${card.defense > 0 ? '+' : ''}${card.defense}`)
   if (card.damage) values.push(`伤害 ${card.damage}`)
@@ -318,6 +324,8 @@ export function renderBattleScreen(state, ui = {}) {
             active: state.turn === SIDE.ENEMY && !state.finished,
             label: SIDE_LABEL[SIDE.ENEMY],
             handCount: state.hands[SIDE.ENEMY].length,
+            cost: getCost(state, SIDE.ENEMY),
+            costMax: MAX_COST,
             isEnemy: true,
           })}
         </div>
@@ -341,7 +349,10 @@ export function renderBattleScreen(state, ui = {}) {
 
       <div class="hand">
         <div class="hand__head">
-          <p class="hand__title">你的手牌<span class="hand__count">${handCards.length} 张</span></p>
+          <p class="hand__title">
+            你的手牌<span class="hand__count">${handCards.length} 张</span>
+            <span class="hand__count">费用 ${getCost(state, SIDE.PLAYER)} / ${MAX_COST}</span>
+          </p>
           <p class="hand__hint">${escapeHtml(handHint)}</p>
         </div>
         <div class="hand__list">${hand}</div>

@@ -11,7 +11,7 @@
  * 这里的函数都是"同步、立刻完成"的，方便测试，也不会有卡死或死循环的风险。
  */
 import { CARDS } from '../data/cards.js'
-import { CARDS_PER_TURN, MAX_BASE_ATTACKS_PER_TURN, MIN_DAMAGE } from '../config.js'
+import { CARDS_PER_TURN, MAX_BASE_ATTACKS_PER_TURN, MAX_COST, MIN_DAMAGE } from '../config.js'
 import {
   SIDE,
   SIDE_LABEL,
@@ -21,7 +21,9 @@ import {
   createBattleState,
   createCardInstance,
   getAttack,
+  getCost,
   getDefense,
+  grantTurnCost,
   heroOf,
   opponentSide,
   setHint,
@@ -55,17 +57,28 @@ export function discardHand(state, side) {
   return count
 }
 
-/** 开始某一方的回合：抽牌 + 重置本回合的攻击次数 */
+/** 开始某一方的回合：发放费用 + 抽牌 + 重置本回合的攻击次数 */
 export function beginTurn(state, side) {
   if (state.finished) return
 
   state.turn = side
   state.baseAttacksThisTurn = 0
+  // 费用：在"自己的回合开始"时发放，新费用 = min(当前 + 3, 上限 8)；
+  // 剩余费用保留（不清零），战斗结束后不再发放（grantTurnCost 内部有 finished 守卫）
+  grantTurnCost(state, side)
   state.hands[side] = drawCards(CARDS_PER_TURN)
 
-  addLog(state, `【第 ${state.round} 回合】${SIDE_LABEL[side]}获得 ${CARDS_PER_TURN} 张卡牌。`, 'system')
+  addLog(
+    state,
+    `【第 ${state.round} 回合】${SIDE_LABEL[side]}获得 ${CARDS_PER_TURN} 张卡牌、费用补至 ${getCost(state, side)} / ${MAX_COST}。`,
+    'system',
+  )
   if (side === SIDE.PLAYER) {
-    setHint(state, `轮到你了：本回合获得 ${CARDS_PER_TURN} 张卡牌，可以出牌并发动一次基础攻击。`, 'info')
+    setHint(
+      state,
+      `轮到你了：本回合获得 ${CARDS_PER_TURN} 张卡牌，当前费用 ${getCost(state, side)} / ${MAX_COST}，可以出牌并发动一次基础攻击。`,
+      'info',
+    )
   } else {
     setHint(state, '电脑对手正在行动…', 'warn')
   }

@@ -13,7 +13,7 @@
  */
 import { getHeroById, getRandomHero } from '../data/heroes.js'
 import { getCardById } from '../data/cards.js'
-import { CARDS_PER_TURN, MIN_DAMAGE } from '../config.js'
+import { BASE_COST_PER_TURN, CARDS_PER_TURN, MAX_COST, MIN_DAMAGE } from '../config.js'
 
 /** 对战的双方 */
 export const SIDE = {
@@ -32,6 +32,12 @@ export const SIDE_LABEL = {
   [SIDE.PLAYER]: '玩家',
   [SIDE.ENEMY]: '电脑对手',
 }
+
+/**
+ * 终局类提示的种类（D5）
+ * 战斗结束后只允许出现这类提示；其他卡牌效果提示与普通提示不得覆盖胜负结论。
+ */
+export const TERMINAL_HINT_KINDS = ['win', 'lose', 'draw']
 
 // 给每个实例一个唯一编号（手牌、日志都要用）
 let instanceCounter = 0
@@ -168,10 +174,54 @@ export function addLog(state, text, kind = 'info') {
   return state
 }
 
-/** 设置界面顶部那条醒目提示（只显示最新一条） */
+/**
+ * 设置界面顶部那条醒目提示（只显示最新一条）
+ *
+ * D5：胜负结论是最终结果，不能被之后结算的卡牌效果或普通提示覆盖。
+ * 所以战斗已结束时，只接受终局类提示（win / lose / draw）。
+ */
 export function setHint(state, text, kind = 'info') {
+  if (state.finished && !TERMINAL_HINT_KINDS.includes(kind)) {
+    return state
+  }
   state.hint = { text, kind }
   return state
+}
+
+/* ------------------------------------------------------------------ */
+/* 费用（玩家与电脑各自独立，不可共享、不可互扣）                       */
+/* ------------------------------------------------------------------ */
+
+/** 取某一方当前的费用 */
+export function getCost(state, side) {
+  return state.costs?.[side] ?? 0
+}
+
+/** 当前费用是否足够支付这张卡（card 是卡牌定义，不是实例） */
+export function canAfford(state, side, card) {
+  return getCost(state, side) >= (card?.cost || 0)
+}
+
+/**
+ * 回合开始时发放基础费用：新费用 = min(当前费用 + 3, 上限 8)
+ * 规则要求：战斗已经结束后不再发放费用。
+ * @returns {number} 发放后的费用
+ */
+export function grantTurnCost(state, side) {
+  if (state.finished) return getCost(state, side)
+  state.costs[side] = Math.min(getCost(state, side) + BASE_COST_PER_TURN, MAX_COST)
+  return state.costs[side]
+}
+
+/**
+ * 扣除费用：只有足额才扣，绝不出现负数余额。
+ * @returns {boolean} 是否扣费成功（false = 费用不足，且未做任何改动）
+ */
+export function spendCost(state, side, amount) {
+  const need = Math.max(0, Math.round(amount || 0))
+  if (getCost(state, side) < need) return false
+  state.costs[side] = getCost(state, side) - need
+  return true
 }
 
 /* ------------------------------------------------------------------ */
@@ -183,6 +233,9 @@ export function setHint(state, text, kind = 'info') {
  * 返回实际造成的伤害值。
  */
 export function applyDamage(state, targetSide, amount, reason) {
+  // D6：战斗已经结束时，伤害路径不再改变任何战斗状态（返回 0 表示没有造成伤害）
+  if (state.finished) return 0
+
   const target = heroOf(state, targetSide)
   const damage = Math.max(0, Math.round(amount))
   target.hp = Math.max(0, target.hp - damage)
@@ -199,6 +252,9 @@ export function applyDamage(state, targetSide, amount, reason) {
  * 返回实际恢复的数值。
  */
 export function applyHeal(state, side, amount, reason) {
+  // D6：战斗已经结束时，治疗路径不再改变任何战斗状态（返回 0 表示没有恢复生命）
+  if (state.finished) return 0
+
   const hero = heroOf(state, side)
   const before = hero.hp
   hero.hp = Math.min(hero.maxHp, hero.hp + Math.max(0, Math.round(amount)))
@@ -230,7 +286,7 @@ export function checkBattleEnd(state) {
   if (playerDead && enemyDead) {
     state.winner = 'draw'
     addLog(state, '双方同时倒下，战斗以平局结束。', 'system')
-    setHint(state, '平局！', 'warn')
+    setHint(state, '平局！', 'draw')
   } else if (enemyDead) {
     state.winner = SIDE.PLAYER
     addLog(state, `电脑对手（${state.enemy.name}）被击败，战斗结束——你赢了！`, 'win')
@@ -272,6 +328,12 @@ export function createBattleState(playerHeroId, enemyHeroId) {
       [SIDE.ENEMY]: [],
     },
 
+    // 费用：双方各自独立，开局都是 0（各自的回合开始时才发放）
+    costs: {
+      [SIDE.PLAYER]: 0,
+      [SIDE.ENEMY]: 0,
+    },
+
     finished: false,
     winner: null,
 
@@ -282,7 +344,7 @@ export function createBattleState(playerHeroId, enemyHeroId) {
   addLog(state, `对战开始：${state.player.name}（玩家） 对阵 ${state.enemy.name}（电脑对手）。`, 'system')
   addLog(
     state,
-    `规则：每回合开始抽 ${CARDS_PER_TURN} 张卡牌；基础攻击伤害 = 攻击力 − 防御力，最低 ${MIN_DAMAGE} 点。`,
+    `规则：每回合开始抽 ${CARDS_PER_TURN} 张卡牌、获得 ${BASE_COST_PER_TURN} 点费用（上限 ${MAX_COST} 点，未用完会保留）；基础攻击伤害 = 攻击力 − 防御力，最低 ${MIN_DAMAGE} 点。`,
     'info',
   )
 

@@ -7,18 +7,22 @@
  *   2. 特殊效果：普通字段表达不了的卡（例如"每回合结束抽一张牌"），
  *      在下面的 SPECIAL_EFFECTS 里按卡牌 id 注册一个函数即可。
  */
+import { MAX_COST } from '../config.js'
 import { CARD_TYPE, SLOT_LABEL, getCardById } from '../data/cards.js'
 import {
   SIDE,
   addLog,
   applyDamage,
   applyHeal,
+  canAfford,
   getAttack,
+  getCost,
   getDefense,
   heroOf,
   opponentSide,
   recalculateEquipmentBonuses,
   setHint,
+  spendCost,
 } from './state.js'
 
 /**
@@ -52,8 +56,20 @@ export function canUseCard(state, side, cardInstance) {
 
   const hero = heroOf(state, side)
 
-  // 治疗类技能在满血时用了也没有意义，直接算"条件不满足"
-  if (card.type === CARD_TYPE.SKILL && card.heal && hero.hp >= hero.maxHp) {
+  // 费用（规则 5 / 6）：费用不足时整张卡不可用。
+  // 这里只是"判断"，不做任何扣费；扣费统一放在 useCard 里，保证失败时不会扣费、不会产生效果。
+  if (!canAfford(state, side, card)) {
+    return {
+      ok: false,
+      reason: `费用不足：「${card.name}」需要 ${card.cost} 点，当前只有 ${getCost(state, side)} 点。`,
+    }
+  }
+
+  // D1：只有"纯治疗卡"（治疗是它唯一的效果）在满血时才算用不上，继续禁止。
+  // D2 / D3：像生命汲取（伤害 + 治疗）、神圣庇护（治疗 + 永久防御）这类卡，
+  //          即使治疗部分会浪费，其余效果依然有效，所以必须允许使用。
+  const hasNonHealEffect = Boolean(card.damage || card.attack || card.defense)
+  if (card.type === CARD_TYPE.SKILL && card.heal && !hasNonHealEffect && hero.hp >= hero.maxHp) {
     return { ok: false, reason: `${hero.name} 的生命值已经满了，「${card.name}」现在用不上。` }
   }
 
@@ -76,6 +92,16 @@ export function useCard(state, side, cardInstance) {
   }
 
   const card = getCardById(cardInstance.cardId)
+
+  // 费用（规则 6 / 7）：通过门槛之后才扣费，而且必须在任何效果生效之前完成。
+  // 这样即使后续效果被 D4（致命后跳过剩余效果）或 D6（战斗结束后冻结状态）中断，
+  // 也不会出现"用了牌没花钱"或者"只扣了一半"的情况。
+  // 装上/替换装备也只在这里扣一次，替换路径不退款、也不会重复扣旧装备的费用。
+  if (!spendCost(state, side, card.cost || 0)) {
+    // 防御式分支：理论上不可达（canUseCard 已经检查过费用）
+    return { ok: false, reason: '费用不足，无法支付这张卡。' }
+  }
+  addLog(state, `支付 ${card.cost || 0} 点费用，剩余 ${getCost(state, side)} / ${MAX_COST} 点。`, 'info')
 
   // 先把手牌里的这张卡移除（装备卡也一样：装上去就离开手牌）
   state.hands[side] = state.hands[side].filter((item) => item.instanceId !== cardInstance.instanceId)
@@ -126,28 +152,32 @@ function castSkillCard(state, side, card) {
     effects.push(`对 ${enemy.name} 造成 ${card.damage} 点伤害`)
   }
 
-  if (card.heal) {
-    const healed = applyHeal(state, side, card.heal, `「${card.name}」生效`)
-    effects.push(`恢复 ${healed} 点生命值`)
-  }
+  // D4：这一次伤害如果已经分出胜负，本卡剩余效果（治疗 / 永久增益 / 特殊效果）一律跳过。
+  //     伤害未致命时照常继续结算，行为与改动前完全一致。
+  if (!state.finished) {
+    if (card.heal) {
+      const healed = applyHeal(state, side, card.heal, `「${card.name}」生效`)
+      effects.push(`恢复 ${healed} 点生命值`)
+    }
 
-  if (card.attack) {
-    hero.skillAttackBonus += card.attack
-    effects.push(`攻击力永久 +${card.attack}`)
-    addLog(state, `${hero.name} 的攻击力永久 +${card.attack}，当前攻击力 ${getAttack(hero)}。`, 'skill')
-  }
+    if (card.attack) {
+      hero.skillAttackBonus += card.attack
+      effects.push(`攻击力永久 +${card.attack}`)
+      addLog(state, `${hero.name} 的攻击力永久 +${card.attack}，当前攻击力 ${getAttack(hero)}。`, 'skill')
+    }
 
-  if (card.defense) {
-    hero.skillDefenseBonus += card.defense
-    effects.push(`防御力永久 +${card.defense}`)
-    addLog(state, `${hero.name} 的防御力永久 +${card.defense}，当前防御力 ${getDefense(hero)}。`, 'skill')
-  }
+    if (card.defense) {
+      hero.skillDefenseBonus += card.defense
+      effects.push(`防御力永久 +${card.defense}`)
+      addLog(state, `${hero.name} 的防御力永久 +${card.defense}，当前防御力 ${getDefense(hero)}。`, 'skill')
+    }
 
-  // 特殊效果（如果有登记）
-  const special = SPECIAL_EFFECTS[card.id]
-  if (special) {
-    special({ state, side, hero, card })
-    effects.push('触发了特殊效果')
+    // 特殊效果（如果有登记）
+    const special = SPECIAL_EFFECTS[card.id]
+    if (special) {
+      special({ state, side, hero, card })
+      effects.push('触发了特殊效果')
+    }
   }
 
   if (side === SIDE.PLAYER && effects.length > 0) {

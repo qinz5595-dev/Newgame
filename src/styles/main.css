@@ -849,6 +849,13 @@ body {
   border-color: var(--red);
 }
 
+/* 平局提示（终局类）：沿用原来的紫色调，保持与 win / lose 同级别的"结论"外观 */
+.hint--draw {
+  color: #ded3ff;
+  background: rgb(155 123 255 / 12%);
+  border-color: rgb(155 123 255 / 55%);
+}
+
 .log__item--damage {
   border-left-color: var(--red);
   color: #ffd7d3;
